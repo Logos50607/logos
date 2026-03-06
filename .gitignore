@@ -1,0 +1,14 @@
+# Sensitive data
+oauth_creds.json
+google_accounts.json
+installation_id
+
+# Volatile or large directories
+antigravity-browser-profile/
+history/
+tmp/
+state.json
+
+# Backup files
+*.orig
+antigravity/
