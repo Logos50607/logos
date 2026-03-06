@@ -12,6 +12,8 @@ Whenever a new folder or workspace is opened with Antigravity:
    missing.
 4. **TODO List**:
    在工作區根目錄應始終存在`TODOLIST.md`。如果不存在，應主動建議建立或直接建立。此文件用於紀錄：尚未裁斷的衝突、尚未完成的開發項目、或未來需注意/完善的部分。
+   - **格式規範**: 必須以條列式撰寫，每項前需有 Checkbox (如 \`- [
+     ]\`)，並在編號或 Checkbox 後加上當前日期 (如 \`2026-03-06\`)。
 
 ## Proactive Rule and Skill Maintenance
 
@@ -35,4 +37,5 @@ Whenever a new folder or workspace is opened with Antigravity:
 
 ## 行為規範 (Behavioral Rules)
 
-- **重複指令限制**：當你已經重複類似指令 3 次以上（如連續失敗的嘗試或無進展的循環操作），必須主動中斷目前流程並切換做法（例如：重新分析問題、採用不同工具或向使用者尋求進一步說明）。
+- **重複指令限制**：當你已經重複類似指令 3
+  次以上（如連續失敗的嘗試或無進展的循環操作），必須主動中斷目前流程並切換做法（例如：重新分析問題、採用不同工具或向使用者尋求進一步說明）。
