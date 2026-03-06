@@ -11,9 +11,13 @@ Whenever a new folder or workspace is opened with Antigravity:
    the presence of these directories and create them immediately if they are
    missing.
 4. **TODO List**:
-   在工作區根目錄應始終存在`TODOLIST.md`。如果不存在，應主動建議建立或直接建立。此文件用於紀錄：尚未裁斷的衝突、尚未完成的開發項目、或未來需注意/完善的部分。
+   在工作區根目錄應始終存在`TODOLIST.md`。如果不存在，應主動建議建立或直接建立。此文件**僅用於紀錄使用者
+   (USER)
+   需處理的事項**：包含尚未裁斷的衝突、尚未完成的開發項目、或未來需注意/完善的部分。AI
+   正在進行的工作應記錄在 Commit 訊息中，而非此文件。
    - **格式規範**: 必須以條列式撰寫，每項前需有 Checkbox (如 \`- [
-     ]\`)，並在編號或 Checkbox 後加上當前日期 (如 \`2026-03-06\`)。
+     ]\`)，並在標號後加上日期 (如 \`2026-03-06\`)。
+   - **排序規範**: 新加入（日期較晚）的項目應放置在文件的最上方。
 
 ## Proactive Rule and Skill Maintenance
 
