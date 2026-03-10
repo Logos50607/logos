@@ -27,33 +27,56 @@ Markdown 格式供後續分析。
 獲取內容後，應進行處理以利 AI 閱讀：
 
 - **局部擷取 (Relevant Slicing)**:
-  僅提取使用者要求的特定部分（例如：文章主體、特定表格、API
-  文件），忽略側邊欄、導覽列及廣告。
-- **Markdown 轉換**: 使用 HTML 轉 Markdown 套件（如 `turndown`）或 AI 自行根據
-  DOM 結構重新組織。
-- **清理內容**:
-  移除冗餘的樣式資訊、指令碼與隱藏元素，僅保留語義化的標籤（標題、清單、表格、連結）。
+  僅提取使用者要求的特定部分，忽略側邊欄、導覽列及廣告。
+- **Markdown 轉換**: 使用 HTML 轉 Markdown 工具（優先選用純 `sh` 版本）。
+- **清理內容**: 移除冗餘的樣式資訊、指令碼與隱藏元素，僅保留語義化的標籤。
 
-## 3. 推薦工具與庫
+## 3. 本地工具: `extract.sh`
 
-如果您有權限在本地環境執行腳本處理大量資料：
+本技能內建了一個純 `sh` 腳本，用於快速擷取並轉換 Markdown：
 
-- **Turndown**: JavaScript 編寫的開源 HTML to Markdown 轉換器。
-- **Node-html-markdown**: 專為 Node.js 最佳化的轉換庫。
-- **@aiquants/html-to-markdown**: 專為 AI Agent 設計，支援動態內容抓取。
+- **路徑**: `.agent/skills/web_content_extraction/scripts/extract.sh`
+- **使用方式範例**:
+  ```bash
+  # 從 URL 讀取
+  sh .agent/skills/web_content_extraction/scripts/extract.sh "https://example.com"
+  # 從 檔案 讀取
+  sh .agent/skills/web_content_extraction/scripts/extract.sh "file.html"
+  # 從 STDIN 讀取
+  cat index.html | sh .agent/skills/web_content_extraction/scripts/extract.sh
+  ```
+- **核心功能**:
+  - 完全使用 `sed`, `awk`, `curl` 編寫，不依賴 Python/Node.js。
+  - 自動移除 `script`, `style`, `nav` 等標籤。
+  - 處理標題、列表、加粗、超連結及圖片標籤。
+  - 處理常見 HTML 實體符號。
 
-## 4. Workflows 範例
+## 4. 品質保證與測試 (QA & Testing)
+
+每個腳本開發後必須包含測試，並確實驗收。
+
+- **測試腳本**: `.agent/skills/web_content_extraction/scripts/test_extract.sh`
+- **執行測試**:
+  ```bash
+  sh .agent/skills/web_content_extraction/scripts/test_extract.sh
+  ```
+
+## 5. 依賴管理 (Dependencies)
+
+所有腳本所需的外部依賴必須記錄於專案根目錄的
+`DEPENDENCIES.md`。執行前請先確認環境：
+
+- 核心依賴：`curl`, `sed`, `awk` (皆為 Linux 標準工具)。
+
+## 6. Workflows 範例
 
 建議搭配 `/fetch-web-content` 工作流使用：
 
-1. 嘗試 `curl` 或 `read_url_content`。
-2. 若內容包含 "Enable JavaScript" 字樣，切換至 `browser_subagent`。
-3. 擷取 `main` 或 `article` 標籤內的 HTML。
-4. 格式化為 Markdown 並呈現給使用者。
+1. 嘗試 `read_url_content` 或 `extract.sh`。
+2. 若內容不完整，切換至 `browser_subagent`。
+3. 擷取核心 HTML 並使用 `extract.sh` 將其轉為 Markdown。
 
-## 5. 最佳實踐
+## 7. 最佳實踐
 
-- **隱私與安全**: 避免在未經使用者許可下進入需要登入的私人頁面。
-- **節省 Token**: 轉換後的 Markdown 應保持精簡，避免傳送過多無關的 token 給 AI
-  模型。
+- **節省 Token**: 確保轉換後的 Markdown 精簡且具語義。
 - **台灣正體中文**: 輸出的摘要與說明應使用台灣正體中文。
