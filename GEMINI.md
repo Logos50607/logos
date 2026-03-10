@@ -1,54 +1,28 @@
-# Antigravity 全域規則 (Antigravity Global Rules)
+# Antigravity 全域規則規範 (Global Guidelines Index)
 
-## 工作區初始化規則 (Workspace Initialization Rule)
+本專案遵循 Antigravity 結構化開發模式，具體規範已分散至 `.agent` 目錄下：
 
-每當使用 Antigravity 開啟新資料夾或工作區時：
+## 1. 核心開發規範 (Rules)
 
-1. **務必**確保工作區根目錄中存在 `.agent` 目錄。
-2. **必要子目錄**：如果 `.agent` 目錄中尚不存在 `rules` 和 `skills`
-   子目錄，應一致地建立它們。
-3. **主動檢查**：在任何工作區開始對話時，驗證這些目錄是否存在，如果缺失則立即建立。
-4. **管理清單 (Management Lists)**： 在工作區根目錄應始終存在 `TODOLIST.md` 與
-   `ASKHUMAN.md`。如果不存在，應主動建議建立或直接建立。
-   - **TODOLIST.md**：紀錄 AI **計畫去做**的事情。
-   - **ASKHUMAN.md**：紀錄 AI
-     **需要請示使用者**的項目，包含尚未裁斷的衝突、尚未完成的開發項目、尚未驗收的項目、或未來需注意/完善的部分。
-   - **格式規範**：必須以條列表撰寫，每項前需有核取方塊 (如
-     `- [ ]`)，並在標號後加上日期 (如 `2026-03-09`)。
-   - **排序規範**：新加入（日期較晚）的項目應放置在文件的最上方。
-5. **README 優先原則**：
-   - **主動讀取**：在任何對話開始時，應先讀取根目錄的 `README.md`
-     以了解專案背景與結構。
-   - **功能說明**：確保每個目錄中的 `README.md`
-     清楚說明該目錄下的檔案與資料夾用途。
-   - **深度參考**：在分析或檢查特定功能時，應主動尋找並參考該功能目錄下的
-     `README.md`（如有），以獲取相關開發須知與邏輯。
-   - **撰寫規範**：README
-     文件應清楚記載專案目標、檔案結構、使用方式、注意事項，以及任何能協助後續開發的事宜。
+- **[語言規範]** (`.agent/rules/language.md`): 統一使用台灣正體中文。
+- **[工作區初始化]** (`.agent/rules/workspace_setup.md`):
+  工作區目錄、TODOLIST、ASKHUMAN 與 README 規則。
+- **[Git 提交規範]** (`.agent/rules/git_usage.md`): 自動提交、訊息格式與 Squash
+  規範。
+- **[行為與維護]** (`.agent/rules/agent_behavior.md`):
+  重複指令限制、主動中斷與規則持續維護。
+- **[開發品質]** (`.agent/rules/development_guidelines.md`):
+  必須包含測試且記錄依賴於 `DEPENDENCIES.md`。
 
-## 主動規則與技能維護 (Proactive Rule and Skill Maintenance)
+## 2. 工作流 (Workflows)
 
-- **持續學習**：在討論過程中，如果您發現特定於項目的慣例、重複模式或應正規化的專門任務，請主動將其正式化後，請示使用者在工作區的
-  `.agent/rules` 或 `.agent/skills` 目錄中建立或更新相關文件。
-- **一致性**：確保所有新規則和技能都遵循工作區的標準格式。
+- **[/setup-workspace]**: 初始化或檢查工作區結構。
+- **[/fetch-web-content]**: 擷取指定網頁內容並轉換為 Markdown。
 
-## 語言規範 (Language Rules)
+## 3. 專屬技能 (Skills)
 
-- **統一語系**：應始終使用**台灣正體中文**（Traditional Chinese,
-  Taiwan）進行溝通、撰寫文件及註解。
-
-## Git 提交規範 (Git Commit Rules)
-
-- **自動提交**：只要對開發或內容檔案進行修改，在完成一個邏輯單位的變更後，必須主動執行
-  `git commit`。
-- **提交前置作業**：在執行 commit 之前，必須先執行 `git diff`
-  (或查看目前的變更內容)，從中歸納出本次修改的實質要旨。
-- **訊息格式**：Commit
-  訊息應包含從變更內容歸納出的要旨，簡明地說明修改內容，並統一使用**台灣正體中文**撰寫。
-- **整理與合併建議**：在提交後，應主動檢查近期提交紀錄。若發現屬於同一邏輯變更的多個
-  commit，應主動挑出並請示使用者是否執行 `squash` 操作以保持歷史紀錄整潔。
-
-## 行為規範 (Behavioral Rules)
-
-- **重複指令限制**：當已經重複類似指令 3
-  次以上（如連續失敗的嘗試或無進展的循環操作），必須主動中斷目前流程並切換做法（例如：重新分析問題、採用不同工具或向使用者尋求進一步說明）。
+- **[skill_management]**: 管理與建立技能。
+- **[rule_management]**: 管理與建立規則。
+- **[workflow_management]**: 管理與建立工作流。
+- **[web_content_extraction]**: 網頁內容擷取與 Markdown 轉換。
+- **[todolist_management]**: TODOLIST 紀錄與排序規範。
