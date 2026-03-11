@@ -6,6 +6,7 @@
       (`DEPENDENCIES.md`)
 - [x] 2026-03-10 整理 Antigravity Rules、Workflows 與 Skills 官方文件內容並加入
       skills 目錄
+- [x] 2026-03-11 增加腳本 100 行限制與索引化/注入設計（Pipe/Strategy）開發規範
 
 - [ ] 2026-03-10 調查 `oauth_creds.json` 與 `google_accounts.json`
       帳號不一致的問題
