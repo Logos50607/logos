@@ -29,4 +29,13 @@ else
     echo "[FAIL] 腳本或樣式內容殘留"
 fi
 
+# 測試 5: 巢狀結構
+echo "測試 5: 巢狀結構 (Bold in link, Image in link)"
+# Case A: Bold + Italic
+echo "<p><strong>Bold <em>Italic</em></strong></p>" | "$SCRIPT" | grep -q "\*\*Bold \*Italic\*\*\*" && echo "[OK] 巢狀加粗/斜體成功" || echo "[FAIL] 巢狀加粗/斜體失敗"
+# Case B: Bold Link
+echo '<a href="https://ex.com"><strong>Bold Link</strong></a>' | "$SCRIPT" | grep -q "\[\*\*Bold Link\*\*\](https://ex.com)" && echo "[OK] 連結內嵌加粗成功" || echo "[FAIL] 連結內嵌加粗失敗"
+# Case C: Image Link
+echo '<a href="https://ex.com"><img src="i.png" alt="Alt"></a>' | "$SCRIPT" | grep -q '\[!\[Alt\](i.png)\](https://ex.com)' && echo "[OK] 連結內嵌圖片成功" || echo "[FAIL] 連結內嵌圖片失敗"
+
 echo "=== 測試完成 ==="
