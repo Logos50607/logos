@@ -9,6 +9,7 @@
   工作區目錄、TODOLIST、ASKHUMAN 與 README 規則。
 - **[Git 提交規範]** (`.agent/rules/git_usage.md`): 自動提交、訊息格式與 Squash
   規範。
+- **[全域資源引用]**: 嚴禁將全域規則或全域環境中的檔案內容複製到個別專案的工作目錄中。規則應透過參考或直接遵循，而非物理拷貝。
 - **[行為與維護]** (`.agent/rules/agent_behavior.md`):
   重複指令限制、主動中斷與規則持續維護。
 - **[開發品質]** (`.agent/rules/development_guidelines.md`):
