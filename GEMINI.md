@@ -30,12 +30,13 @@ description: "Antigravity 全域規則索引，定義了全域適用的規則、
 - **git_usage.md**: 執行 Git 版控操作時遵循。規範提交語義與歷史紀錄整理。
 - **development_guidelines.md**:
   開發功能或重構時遵循。規範測試驅動、依賴管理與模組化結構。
+- **web_content_extraction.md**: 擷取網頁內容的使用時機與規範。
 
 ## 2. 工作流 (Workflows)
 
 - **[/setup-project]**: 初始化或檢查專案結構與管理清單。
 - **[/fetch-web-content]**: 擷取指定網頁內容（URL 或檔案）並轉換為 Markdown。
-- **[/commit]**: 執行標準化的 Git 提交流程，包含變更分析與總結。
+- **[/git-commit]**: 執行標準化的 Git 提交流程，包含變更分析與總結。
 
 ## 3. 專屬技能 (Skills)
 

@@ -1,5 +1,5 @@
 ---
-name: fetch-web-content
+name: fetch_web_content
 description: 擷取指定網頁內容並轉換為 Markdown
 ---
 

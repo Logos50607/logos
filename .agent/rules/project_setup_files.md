@@ -1,7 +1,7 @@
 ---
 name: project_setup_files
 trigger: always_on
-description: "專案結構與管理清單規範，定義了 .agent 目錄、GEMINI.md 以及 TODOLIST/ASKHUMAN 的用途。"
+description: "專案結構與管理清單規範，定義了 .agent 目錄、GEMINI.md 以及 AGENT_PLAN/ASK_HUMAN 的用途。"
 ---
 
 # 專案結構與清單規範 (Project Setup & Lists)
