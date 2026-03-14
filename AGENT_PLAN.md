@@ -8,8 +8,7 @@
       skills 目錄
 - [x] 2026-03-11 增加腳本 100 行限制與索引化/注入設計（Pipe/Strategy）開發規範
 
-- [ ] 2026-03-10 調查 `oauth_creds.json` 與 `google_accounts.json`
-      帳號不一致的問題
-- [ ] 2026-03-10 確認 `settings.json` 的 `selectedType` 是否正確
+- [x] 2026-03-14 清理 Git 歷史紀錄，將 `projects.json`, `settings.json`,
+      `trustedFolders.json` 加入 `.gitignore` 並從所有歷史中移除。
 - [x] 2026-03-09 區分 TODOLIST 與 ASKHUMAN 管理
 - [x] 2026-03-09 整理 GEMINI.md 並完成語言規則設定
