@@ -1,3 +1,9 @@
+---
+name: language
+trigger: always_on
+description: "強制要求使用台灣正體中文進行溝通與文件撰寫。"
+---
+
 # 語言規範 (Language Rules)
 
 應始終使用**台灣正體中文**（Traditional Chinese,
