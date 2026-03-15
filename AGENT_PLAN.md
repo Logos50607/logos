@@ -1,5 +1,6 @@
 # TODOLIST
 
+- [ ] 2026-03-15 優化各專案的 GEMINI.md 規範（加強結構化與索引功能）
 - [x] 2026-03-10 實作 `/fetch-web-content` 工作流與高品質網頁擷取工具
       `extract.sh`
 - [x] 2026-03-10 建立開發規範 Rules (`development_guidelines.md`) 與依賴管理

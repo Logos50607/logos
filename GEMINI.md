@@ -6,13 +6,13 @@ description: "Antigravity 全域規則索引，定義了全域適用的規則、
 # Antigravity 全域綱領 (Global Guidelines Index)
 
 本文件作為全域規則 (rules)、技能 (skills)、與工作流 (workflows)
-之索引，其細則列於 ~/gemini/.agent 資料夾下。
+之索引，其細則列於 ~/.gemini/.agent 資料夾下。
 
 ## 0. 核心守則
 
-- 每次在更動 ~/gemini/.agent 下任何檔案時，都必須同步更新此文件。
-- 本文件為 ~/gemini/.agent 下所有檔案之表頭 yml 檔的集合。
-- 載入所有 ~/.gemini/.agent/rules 中所有 ALWAYS ON 的項目。
+- 每次在更動 ~/.gemini/.agent 下任何檔案時，都必須同步更新此文件。
+- 本文件為 ~/.gemini/.agent 下所有檔案之表頭 yml 檔的集合。
+- 載入所有 ~/.gemini/.agent/rules 中所有項目。
 - 嚴禁將 ~/.gemini
   中任何檔案內容複製到個別專案中。規則應該直接遵循或參考，而非直接物理複製。
 
@@ -22,6 +22,8 @@ description: "Antigravity 全域規則索引，定義了全域適用的規則、
 - **agent_behavior.md**: ALWAYS ON。規範重複指令限制、主動中斷與規則持續維護。
 - **project_setup_files.md**: ALWAYS ON。定義專案結構、`.agent`
   目錄用途以及管理清單的管理規範。
+- **gemini_md_management.md**: ALWAYS ON。規範專案層級 GEMINI.md 的初始化狀態與
+  Metadata 索引要求。
 - **readme_management.md**: ALWAYS ON。規範 README.md 的優先讀取原則與維護職責。
 - **todolist_format.md**: 當編輯 `AGENT_PLAN.md` 或 `ASK_HUMAN.md`
   時遵循（Glob）。規範清單格式、日期與排序。

@@ -1,5 +1,4 @@
 ---
-name: agent_behavior
 trigger: always_on
 description: "AI 行為與維護規範，包含重複指令限制與規則、技能的主動維護。"
 ---
@@ -10,17 +9,19 @@ description: "AI 行為與維護規範，包含重複指令限制與規則、技
 
 ## 1. 主動維護規則與技能
 
-- **持續學習**：在討論過程中發現全域或特定工作區的慣例、重複模式或應正規化的專門任務時，AI
+- **持續學習**：在討論過程中發現全域或特定專案的慣例、重複模式或應正規化的專門任務時，AI
   應主動將其正式化。
-- **規則更新**：主動請示使用者在全域或工作區下之 GEMINI.md, `.agent/rules`,
-  `.agent/skills` 或 `.agent/workflows` 目錄中建立或更新相關文件。
-- **一致性**：確保所有新規則和技能遵循專案標準格式（例如 Markdown、YAML
+- **規則更新**：主動請示使用者在全域或特定工作區下之 GEMINI.md, README.md,
+  `.agent/rules`, `.agent/skills` 或 `.agent/workflows`
+  目錄中建立或更新相關文件。
+- **一致性**：確保所有 metadata 遵循專案標準格式（例如 Markdown、YAML
   frontmatter）。
 
 ## 2. 專案初始化規範
 
-- **強制初始化**：當進入一個新目錄，若發現並無 `GEMINI.md`，或者 `GEMINI.md`
-  中並未記錄任何初始化資訊時，AI **必須優先執行** `/setup-project` 工作流。
+- **強制初始化**：當進入一個新專案，若發現其根目錄並無 `GEMINI.md`，或者
+  `GEMINI.md` 中並未記錄任何初始化資訊時，AI **必須優先執行** `/setup-project`
+  工作流。
 
 ## 3. 重複指令限制
 
