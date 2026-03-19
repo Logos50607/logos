@@ -1,0 +1,42 @@
+[
+    {
+        "agent": "antigravity",
+        "disciplines": [
+            {
+                "type": "rules",
+                "source": "/home/logos/.gemini/.agent/rules",
+                "target": "/home/logos/.gemini/GEMINI.md",
+                "link_type": "insert_text"
+            },
+            {
+                "type": "workflows",
+                "source": "/home/logos/.gemini/.agent/workflows",
+                "target": "/home/logos/.gemini/antigravity/global_workflows",
+                "link_type": "soft_link"
+            },
+            {
+                "type": "skills",
+                "source": "/home/logos/.gemini/.agent/skills",
+                "target": "/home/logos/.gemini/antigravity/skills",
+                "link_type": "soft_link"
+            }
+        ]
+    },
+    {
+        "agent": "claude",
+        "disciplines": [
+            {
+                "type": "rules",
+                "source": "/home/logos/.gemini/.agent/rules",
+                "target": "/home/logos/.claude/CLAUDE.md",
+                "link_type": "insert_text"
+            },
+            {
+                "type": "workflows",
+                "source": "/home/logos/.gemini/.agent/workflows",
+                "target": "/home/logos/.claude/commands",
+                "link_type": "soft_link"
+            }
+        ]
+    }
+]

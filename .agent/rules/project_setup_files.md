@@ -1,7 +1,7 @@
 ---
 name: project_setup_files
 trigger: always_on
-description: "專案結構與管理清單規範，定義了 .agent 目錄、GEMINI.md 以及 AGENT_PLAN/ASK_HUMAN 的用途。"
+description: "專案結構與管理清單規範，定義了 .agent 目錄以及 AGENT_PLAN/ASK_HUMAN 的用途。"
 ---
 
 # 專案結構與清單規範 (Project Setup & Lists)
@@ -13,8 +13,8 @@ description: "專案結構與管理清單規範，定義了 .agent 目錄、GEMI
 - `.agent/rules/`：存放專案規範。
 - `.agent/skills/`：存放專案輔助技能。
 - `.agent/workflows/`：存放 slash commands 及自動化流程。
-- `GEMINI.md`: rules, skills, 與 workflows
-  的索引；其格式為「檔案或資料夾名稱：使用情境」。
+- `.agent/INDEX.md`：(可選) 由 `sync_disciplines` 或 `/setup-project`
+  自動生成，作為 rules/skills/workflows 的索引。
 - `README.md`：參照 global 的 readme rule 建立。
 
 ## 2. 管理清單 (TODOLIST)

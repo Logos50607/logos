@@ -1,6 +1,8 @@
 # TODOLIST
 
-- [ ] 2026-03-15 優化各專案的 GEMINI.md 規範（加強結構化與索引功能）
+- [ ] 2026-03-20 整合 `/setup-project` 與 `/sync-disciplines`： - 移除專案中的
+      `GEMINI.md`，將初始化資訊改寫入 `README.md`。 - 在 `/setup-project`
+      的最後一步自動執行同步機制。
 - [x] 2026-03-10 實作 `/fetch-web-content` 工作流與高品質網頁擷取工具
       `extract.sh`
 - [x] 2026-03-10 建立開發規範 Rules (`development_guidelines.md`) 與依賴管理
