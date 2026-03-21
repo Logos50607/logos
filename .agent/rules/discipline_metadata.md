@@ -24,7 +24,13 @@ globs: "GEMINI.md .agent/rules/**/*.md .agent/skills/**/*.md .agent/workflows/**
   "always_on", "model_decision", "glob", 或 "manual"。
 - `glob`： 如果 trigger 的值是 "glob"，則必須決定所適用的檔案路徑之模式。
 
-## 2. 範例
+## 2. Global Discipline 額外規範
+
+- **SSOT**：Global disciplines 的唯一來源為 `~/.gemini/.agent/`，修改必須在此進行，再透過 sync 同步至各 agent。
+- **不得與任何特定專案耦合**：global disciplines 不得包含專案特定的欄位名稱、路徑、程式碼片段或業務邏輯。
+- 範例若有必要，應使用抽象的佔位名稱（如 `keyA`、`featureX`），而非實際業務欄位。
+
+## 3. 範例
 
 ```yaml
 ---
