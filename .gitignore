@@ -1,0 +1,4 @@
+src/channels/line/session/state.json
+src/channels/line/captured.json
+__pycache__/
+*.pyc
