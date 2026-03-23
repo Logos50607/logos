@@ -1,9 +1,17 @@
+# /// script
+# dependencies = ["playwright"]
+# ///
 """
-capture.py - 錄製 LINE Web 的 HTTP + WebSocket 流量
-用法: python capture.py [--duration 60]
+capture.py - 透過 CDP 攔截 LINE extension service worker 的背景流量
+用法: uv run capture.py [--duration 60]
 
-第一次執行：瀏覽器會開啟，掃 QR 登入後按 Enter 繼續錄製
-之後執行：自動帶入 session，無需登入
+前置: Chrome 需以 --remote-debugging-port=9222 啟動
+啟動指令:
+  CHROME_DATA=/data/Logos/switchboard/src/channels/line/session/chrome-data
+  flatpak run com.google.Chrome --remote-debugging-port=9222
+    --user-data-dir=$CHROME_DATA --profile-directory="Profile 1"
+
+注意: 不開 LINE UI（避免 sendChatChecked 標記已讀），只監聽 service worker
 """
 
 import asyncio
@@ -13,14 +21,13 @@ import time
 from pathlib import Path
 from playwright.async_api import async_playwright
 
-SESSION_FILE = Path(__file__).parent / "session" / "state.json"
-OUTPUT_FILE  = Path(__file__).parent / "captured.json"
-LINE_URL     = "https://chat.line.me"
-DURATION     = int(sys.argv[sys.argv.index("--duration") + 1]) if "--duration" in sys.argv else 60
+EXT_ID      = "ophjlpahpchlmihnnnihgmmeilfjmjjc"
+CDP_URL     = "http://localhost:9222"
+OUTPUT_FILE = Path(__file__).parent / "captured.json"
+DURATION    = int(sys.argv[sys.argv.index("--duration") + 1]) if "--duration" in sys.argv else 60
 
 
 def _try_decode(payload):
-    """嘗試將 WS payload 解析為 JSON，失敗則回傳 hex"""
     if isinstance(payload, bytes):
         try:    return json.loads(payload.decode("utf-8"))
         except: return payload.hex()
@@ -28,61 +35,62 @@ def _try_decode(payload):
     except: return payload
 
 
-async def record(page, log: list):
-    """掛載 HTTP response 與 WebSocket 攔截器"""
-
+def attach_listeners(page, log: list, label: str = "page"):
     async def on_response(response):
+        if "line-chrome-gw.line-apps.com" not in response.url:
+            return
         try:
-            body = await response.body()
-            decoded = _try_decode(body)
+            body = _try_decode(await response.body())
         except:
-            decoded = None
+            body = None
+        try:
+            req_headers = dict(await response.request.all_headers())
+        except:
+            req_headers = {}
         log.append({
-            "type": "http",
-            "ts": time.time(),
+            "type": "http", "src": label, "ts": time.time(),
             "method": response.request.method,
             "url": response.url,
             "status": response.status,
-            "body": decoded,
+            "req_headers": req_headers,
+            "body": body,
         })
 
-    def on_websocket(ws):
-        def on_recv(payload):
-            log.append({"type": "ws_recv", "ts": time.time(), "url": ws.url, "data": _try_decode(payload)})
-        def on_send(payload):
-            log.append({"type": "ws_send", "ts": time.time(), "url": ws.url, "data": _try_decode(payload)})
-        ws.on("framereceived", lambda f: on_recv(f["payload"]))
-        ws.on("framesent",     lambda f: on_send(f["payload"]))
-
-    page.on("response",  on_response)
-    page.on("websocket", on_websocket)
+    page.on("response", on_response)
 
 
 async def main():
     log = []
-    first_run = not SESSION_FILE.exists()
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        ctx_args = {} if first_run else {"storage_state": str(SESSION_FILE)}
-        ctx  = await browser.new_context(**ctx_args)
-        page = await ctx.new_page()
+        print(f">>> 連接 Chrome CDP: {CDP_URL}", flush=True)
+        browser = await p.chromium.connect_over_cdp(CDP_URL)
+        ctx = browser.contexts[0]
 
-        await record(page, log)
-        await page.goto(LINE_URL)
+        # 攔截所有現有 page（不主動開新視窗，避免觸發 sendChatChecked）
+        for page in ctx.pages:
+            if EXT_ID in page.url:
+                print(f">>> 偵測到已開啟的 LINE 頁面: {page.url}", flush=True)
+                attach_listeners(page, log, "ui_page")
 
-        if first_run:
-            print(">>> 請在瀏覽器中掃描 QR Code 登入，登入完成後按 Enter...")
-            await asyncio.get_event_loop().run_in_executor(None, input)
-            SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-            await ctx.storage_state(path=str(SESSION_FILE))
-            print(f">>> Session 已儲存至 {SESSION_FILE}")
+        # 監聽 service worker
+        for sw in ctx.service_workers:
+            if EXT_ID in sw.url:
+                print(f">>> 監聽 service worker: {sw.url}", flush=True)
+                attach_listeners(sw, log, "sw")
 
-        print(f">>> 錄製中（{DURATION} 秒），請勿點入任何對話視窗...")
+        # 監聽未來新開的 page / sw
+        ctx.on("page", lambda pg: attach_listeners(pg, log, "new_page"))
+        ctx.on("serviceworker", lambda sw: (
+            print(f">>> 新 service worker: {sw.url}", flush=True) or
+            attach_listeners(sw, log, "sw") if EXT_ID in sw.url else None
+        ))
+
+        print(f">>> 錄製中（{DURATION} 秒），不開 LINE UI...", flush=True)
         await asyncio.sleep(DURATION)
 
         OUTPUT_FILE.write_text(json.dumps(log, ensure_ascii=False, indent=2))
-        print(f">>> 完成！共 {len(log)} 筆紀錄，已儲存至 {OUTPUT_FILE}")
+        print(f">>> 完成！共 {len(log)} 筆，已儲存至 {OUTPUT_FILE}", flush=True)
         await browser.close()
 
 
