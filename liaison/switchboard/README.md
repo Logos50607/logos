@@ -39,18 +39,33 @@ switchboard/
 
 ## 使用指南 (Usage Guide)
 
-> 待建立
+### LINE 個人帳號 inbound（已可用）
+
+```bash
+# 1. 啟動 Chrome（見 src/channels/line/personal/README.md）
+# 2. 開始錄製
+uv run src/channels/line/personal/capture.py --duration 60
+```
 
 ## 實作原理 (Implementation Details)
 
 採用 **Functional Core, Imperative Shell** 架構：
 
-- **Channels**：各平台 read-only 介接，確保不觸碰未讀狀態
-- **Processors**：純函式，負責訊息解析與任務提取
-- **Output**：任務清單輸出（本地檔案、通知等）
-- **Core**：協調 pipeline，注入依賴
+- **Channels**：各平台介接，只管收發，不含業務邏輯
+- **Processors**：純函式，raw 訊息 → 統一 Message schema
+- **Output**：任務輸出與 outbound 觸發
+- **Core**：Pipeline 協調，依賴注入，不硬編碼 channel
 
-## 專案初始化紀錄
+架構決策與邊界定義見 `.agent/rules/architecture.md`。
 
-- 初始化日期：2026-03-23
-- 狀態：初始化中
+## 模組實作狀態
+
+| 模組 | 狀態 |
+|------|------|
+| LINE 個人 inbound（CDP capture） | ✅ |
+| LINE 個人 outbound（CDP send） | ⬜ |
+| LINE 官方 inbound（webhook） | ⬜ |
+| LINE 官方 outbound（push/reply） | ⬜ |
+| Processors（訊息解析） | ⬜ |
+| Output（任務輸出） | ⬜ |
+| Core pipeline | ⬜ |
