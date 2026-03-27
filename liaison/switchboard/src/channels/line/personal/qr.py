@@ -17,7 +17,7 @@ _QR_API_PATH     = "createS"   # LINE GW endpoint 含此字串
 # ── QR data 取得（攔截 network response）────────────────────────
 
 async def _fetch_auth_session_id(page: Page) -> str | None:
-    """點 refresh，攔截 LINE GW response，回傳 authSessionId"""
+    """點 refresh，攔截 LINE GW response（含 service worker），回傳 authSessionId"""
     future: asyncio.Future = asyncio.get_event_loop().create_future()
 
     async def on_response(resp):
@@ -32,7 +32,8 @@ async def _fetch_auth_session_id(page: Page) -> str | None:
         except Exception:
             pass
 
-    page.on("response", on_response)
+    ctx = page.context
+    ctx.on("response", on_response)
     await page.evaluate("""() => {
         document.querySelector('[class*="button_refresh"]')?.click();
     }""")
@@ -41,7 +42,7 @@ async def _fetch_auth_session_id(page: Page) -> str | None:
     except asyncio.TimeoutError:
         return None
     finally:
-        page.remove_listener("response", on_response)
+        ctx.remove_listener("response", on_response)
 
 
 def _make_png(qr_url: str) -> bytes:
