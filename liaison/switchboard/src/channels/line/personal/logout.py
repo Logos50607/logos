@@ -38,10 +38,15 @@ async def main(cdp_url: str) -> None:
         }""")
 
         if not clicked:
-            print("找不到登出按鈕，直接清除 extension storage...")
+            print("找不到登出按鈕，清除所有 extension storage...")
             await ext_page.evaluate("""() => {
                 chrome.storage.local.clear();
-                chrome.storage.session?.clear();
+                chrome.storage.sync?.clear();
+                try { chrome.storage.session?.clear(); } catch(e) {}
+                localStorage.clear();
+                sessionStorage.clear();
+                indexedDB.databases?.().then(dbs =>
+                    dbs.forEach(db => indexedDB.deleteDatabase(db.name)));
             }""")
         else:
             # 確認登出彈窗
