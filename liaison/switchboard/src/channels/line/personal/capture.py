@@ -25,7 +25,18 @@ import time
 from pathlib import Path
 from playwright.async_api import async_playwright, BrowserContext
 
-EXT_ID  = os.getenv("LINE_PERSONAL_EXT_ID", "ophjlpahpchlmihnnnihgmmeilfjmjjc")
+_EXT_ID_FILE = Path(__file__).parent / ".ext-id"
+_EXT_ID_DEFAULT = "ophjlpahpchlmihnnnihgmmeilfjmjjc"
+
+def _load_ext_id() -> str:
+    """優先序：env var > .ext-id（start.sh 寫入）> 預設（store ID）"""
+    if val := os.getenv("LINE_PERSONAL_EXT_ID"):
+        return val
+    if _EXT_ID_FILE.exists():
+        return _EXT_ID_FILE.read_text().strip()
+    return _EXT_ID_DEFAULT
+
+EXT_ID  = _load_ext_id()
 CDP_URL = os.getenv("LINE_PERSONAL_CDP_URL", "http://localhost:9222")
 LINE_GW = "line-chrome-gw.line-apps.com"
 
