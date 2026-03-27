@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["playwright", "pillow", "zxing-cpp", "qrcode"]
+# dependencies = ["playwright", "qrcode[pil]"]
 # ///
 """
 run.py - LINE 個人帳號登入主流程

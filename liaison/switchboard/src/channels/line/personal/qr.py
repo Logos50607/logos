@@ -1,53 +1,71 @@
 """
-qr.py - LINE QR code 擷取、顯示與登入狀態監聽
+qr.py - LINE QR code 取得、顯示與登入狀態監聽
 
 對外介面:
   show_and_wait(page, qr_port)  顯示 QR code，等待登入，印出確認號碼
 """
 
-import base64, http.server, io, socket, threading
+import asyncio, http.server, io, json, socket, sys, threading
 from playwright.async_api import Page
-from PIL import Image
-import zxingcpp
 import qrcode as qrlib
 
 
-# ── QR code 擷取與顯示 ───────────────────────────────────────────
+_QR_URL_TEMPLATE = "https://liff.line.me/login-auth/qr?authSessionId={}"
+_QR_API_PATH     = "createS"   # LINE GW endpoint 含此字串
 
-async def _get_qr_png(page: Page) -> bytes | None:
-    data_url = await page.evaluate("""() => {
-        const c = document.querySelector('[class*="thumbnail"] canvas, canvas');
-        return c ? c.toDataURL('image/png') : null;
+
+# ── QR data 取得（攔截 network response）────────────────────────
+
+async def _fetch_auth_session_id(page: Page) -> str | None:
+    """點 refresh，攔截 LINE GW response，回傳 authSessionId"""
+    future: asyncio.Future = asyncio.get_event_loop().create_future()
+
+    async def on_response(resp):
+        if future.done(): return
+        if _QR_API_PATH not in resp.url: return
+        try:
+            body = await resp.body()
+            data = json.loads(body)
+            sid = data.get("data", {}).get("authSessionId")
+            if sid:
+                future.set_result(sid)
+        except Exception:
+            pass
+
+    page.on("response", on_response)
+    await page.evaluate("""() => {
+        document.querySelector('[class*="button_refresh"]')?.click();
     }""")
-    if not data_url:
+    try:
+        return await asyncio.wait_for(future, timeout=15)
+    except asyncio.TimeoutError:
         return None
-    return base64.b64decode(data_url.split(",")[1])
+    finally:
+        page.remove_listener("response", on_response)
 
 
-def _decode(png: bytes) -> str | None:
-    img = Image.open(io.BytesIO(png))
-    big = img.resize((img.width * 3, img.height * 3), Image.NEAREST)
-    results = zxingcpp.read_barcodes(big)
-    return results[0].text if results else None
+def _make_png(qr_url: str) -> bytes:
+    """從 URL 生成 QR code PNG bytes"""
+    qr = qrlib.QRCode(border=2)
+    qr.add_data(qr_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
-def _print_terminal(data: str) -> None:
+def _print_terminal(qr_url: str) -> None:
     qr = qrlib.QRCode(border=1)
-    qr.add_data(data)
+    qr.add_data(qr_url)
     qr.make(fit=True)
     try:
-        qr.print_ascii(invert=True, tty=True)   # 半格字元，佔空間較小
+        qr.print_ascii(invert=True, tty=True)
     except OSError:
         qr.print_ascii(invert=True)
 
 
-def _local_ip() -> str:
-    try:
-        s = socket.socket(); s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]; s.close(); return ip
-    except Exception:
-        return "localhost"
-
+# ── HTTP server ──────────────────────────────────────────────────
 
 class _Handler(http.server.BaseHTTPRequestHandler):
     png: bytes = b""
@@ -65,15 +83,11 @@ class _ReuseServer(http.server.HTTPServer):
 
 
 def _free_port(port: int) -> None:
-    """若 port 已被佔用則嘗試 kill 占用的 process"""
-    import subprocess
+    import subprocess, os, signal
     r = subprocess.run(["fuser", f"{port}/tcp"], capture_output=True, text=True)
     for pid in r.stdout.split():
-        try:
-            import os, signal
-            os.kill(int(pid), signal.SIGTERM)
-        except Exception:
-            pass
+        try: os.kill(int(pid), signal.SIGTERM)
+        except Exception: pass
 
 
 def _serve(port: int, png: bytes) -> http.server.HTTPServer:
@@ -88,22 +102,31 @@ def _serve(port: int, png: bytes) -> http.server.HTTPServer:
     return srv
 
 
+def _local_ip() -> str:
+    for target in ("10.255.255.255", "192.168.1.1", "172.16.0.1"):
+        try:
+            s = socket.socket(); s.settimeout(1); s.connect((target, 1))
+            ip = s.getsockname()[0]; s.close()
+            if not ip.startswith("127."): return ip
+        except Exception: pass
+    try: return socket.gethostbyname(socket.gethostname())
+    except Exception: return "localhost"
+
+
 # ── 登入狀態偵測 ─────────────────────────────────────────────────
 
 async def _state(page: Page) -> tuple[str, str | None]:
-    """回傳 (state, number)
-    state: 'menu'|'qr'|'number'|'done'|'unknown'
-      menu = 登入選單（尚未點 QR code login）
-      qr   = QR code 已顯示（canvas 存在）
-    """
+    """回傳 (state, number)  state: 'menu'|'qr'|'number'|'done'|'unknown'"""
     try:
         r = await page.evaluate("""() => {
             const text = document.body?.innerText || '';
             if (document.querySelector('[class*="chatList"],[class*="conversationList"]'))
                 return ['done', null];
-            const m = text.match(/\\b(\\d{2,3})\\b/);
-            if (document.querySelector('[class*="verify"],[class*="pincode"]') && m)
-                return ['number', m[1]];
+            if (!document.querySelector('canvas')) {
+                const m = text.match(/(?:^|\\s)(\\d{6})(?:\\s|$)/m);
+                if (m && document.querySelector('[class*="loginPage"]'))
+                    return ['number', m[1]];
+            }
             if (document.querySelector('canvas'))
                 return ['qr', null];
             if (document.querySelector('[class*="loginPage"]'))
@@ -115,15 +138,7 @@ async def _state(page: Page) -> tuple[str, str | None]:
         return 'unknown', None
 
 
-async def _trigger_qr(page: Page) -> None:
-    """點擊 refresh 觸發 QR code 產生，等待 canvas 出現"""
-    await page.evaluate("""() => {
-        document.querySelector('[class*="button_refresh"]')?.click();
-    }""")
-    await page.wait_for_selector('[class*="thumbnail"] canvas', timeout=15000)
-
-
-# ── 等待就緒 / 顯示 QR ──────────────────────────────────────────
+# ── 等待就緒 ─────────────────────────────────────────────────────
 
 async def _wait_for_login_page(page: Page) -> str:
     """等登入頁或已登入，回傳最終 state"""
@@ -131,56 +146,49 @@ async def _wait_for_login_page(page: Page) -> str:
         '[class*="loginPage"],[class*="chatList"],[class*="conversationList"]',
         timeout=15000)
     state, _ = await _state(page)
-    if state in ("menu", "qr"):
-        await _trigger_qr(page)
-        state = "qr"
     return state
 
 
+# ── 顯示 QR ──────────────────────────────────────────────────────
+
 async def _display_qr(page: Page, qr_port: int) -> http.server.HTTPServer:
-    """擷取並顯示 QR code，回傳 HTTP server"""
-    png = await _get_qr_png(page)
-    qr_data = _decode(png) if png else None
-    if qr_data:
-        _print_terminal(qr_data)
+    """攔截 QR session ID，顯示 QR，等使用者按 Enter"""
+    sid = await _fetch_auth_session_id(page)
+    if not sid:
+        print("（無法取得 QR session ID）")
+        srv = _serve(qr_port, b"")
     else:
-        print("（無法在 terminal 顯示 QR）")
-    srv = _serve(qr_port, png or b"")
+        qr_url = _QR_URL_TEMPLATE.format(sid)
+        _print_terminal(qr_url)
+        png = _make_png(qr_url)
+        srv = _serve(qr_port, png)
+
     ip = _local_ip()
     print(f"\n{'━' * 45}")
     print(f"  用手機掃描上方 QR code 登入 LINE")
-    print(f"  （若 QR 太大，請改掃這個網址的圖片）")
-    print(f"  http://{ip}:{qr_port}/")
-    print(f"{'━' * 45}")
+    print(f"  備用圖片：http://{ip}:{qr_port}/")
+    print(f"{'━' * 45}", flush=True)
+    print("\n掃描完成後按 Enter...", flush=True)
+    await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
     return srv
 
 
+# ── 輪詢直到登入完成 ──────────────────────────────────────────────
+
 async def _poll_until_done(page: Page, srv: http.server.HTTPServer) -> None:
-    """輪詢登入狀態直到完成（每 2 秒檢查一次）"""
-    import asyncio
     prev = "qr"
     while True:
         await asyncio.sleep(2)
         state, number = await _state(page)
-
         if state == "number" and prev != "number":
-            print(f"\n┌─────────────────────┐")
-            print(f"│  確認號碼：  {number:>3}     │")
-            print(f"│  在手機上點確認      │")
-            print(f"└─────────────────────┘")
+            print(f"\n┌──────────────────────────┐")
+            print(f"│  確認號碼：  {number}     │")
+            print(f"│  在手機上點確認           │")
+            print(f"└──────────────────────────┘", flush=True)
         elif state == "done":
             print("\n✓ 登入成功！")
             srv.shutdown()
             return
-        elif state == "qr":
-            # QR 可能已刷新，同步更新 HTTP server 的圖片
-            try:
-                new_png = await _get_qr_png(page)
-                if new_png:
-                    _Handler.png = new_png
-            except Exception:
-                pass
-
         prev = state
 
 
