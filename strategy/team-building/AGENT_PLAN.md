@@ -16,10 +16,11 @@
 ## Repo 建制
 
 - [x] 2026-03-26 將所有 GitHub repo 按組別分類，產出 REPO_CLASSIFICATION.md
-- [ ] 2026-03-26 待使用者核可分類後，將 repo clone 至對應組別目錄
+- [x] 2026-03-27 將 logos repo 從 polyrepo 重組為 monorepo，所有組別統一於 `Logos50607/logos`
+- [x] 2026-03-27 education/logos 改名為 education/global-disciplines，.git 提升至 repo root
+- [x] 2026-03-27 個人/待分類專案移至 `/data/personal/`
 - [ ] 2026-03-26 建立各組別的 README.md 說明職責與規範
 
 ## 待分類專案
 
-- [ ] 2026-03-26 在 /data/logos/ 下建立 `_uncategorized/` 目錄，clone 所有個人 repo
-- [ ] 2026-03-26 逐一讀取 `_uncategorized/` 中的 repo，進行分類或拆解評估
+- [ ] 2026-03-26 逐一讀取 `/data/personal/` 中的 repo，進行分類或拆解評估
