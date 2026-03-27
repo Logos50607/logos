@@ -49,8 +49,28 @@ uv run run.py
 登入後執行：
 
 ```bash
-uv run capture.py --duration 60
+# 抓 initial sync（reload extension，等 5 秒無流量後結束，存成 JSON）
+uv run capture.py fetch
+
+# 抓特定日期之後的資料
+uv run capture.py fetch --since 2025-01-01
+
+# 持續監聽新訊息（每筆即時 append 到 JSONL）
+uv run capture.py listen
+
+# 印到 stdout（測試用）
+uv run capture.py watch
 ```
+
+### capture 模式說明
+
+| 模式 | 說明 | 輸出 |
+|------|------|------|
+| `fetch` | reload extension 觸發 initial sync，5 秒無流量後結束 | `captured.json` |
+| `listen` | 持續監聽，每筆即時 append | `captured.jsonl` |
+| `watch` | 同 listen，但印到 stdout | stdout |
+
+> `fetch` 模式抓到的是 LINE extension 啟動時的 initial sync，約 40+ 筆 API，含聊天室清單、聯絡人、訊息盒子等。
 
 ## 環境變數
 
