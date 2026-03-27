@@ -124,6 +124,10 @@ async def _state(page: Page) -> tuple[str, str | None]:
     try:
         r = await page.evaluate("""() => {
             const text = document.body?.innerText || '';
+            const hash = location.hash || '';
+            // 已登入：URL 跳到 friends/chats 等頁面，或有 chatList 元件
+            if (/\\/friends|\\/chats|\\/timeline|\\/more/.test(hash))
+                return ['done', null];
             if (document.querySelector('[class*="chatList"],[class*="conversationList"]'))
                 return ['done', null];
             if (!document.querySelector('canvas')) {
