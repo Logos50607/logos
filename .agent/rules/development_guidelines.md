@@ -26,7 +26,12 @@ description: "開發與重構品質規範，要求任務執行（開發、重構
 - **格式要求**：列出依賴名稱、版本要求（如有）、用途以及安裝/安裝檢查方式。
 - **持續更新**：新增任何依賴時，必須同步更新 `DEPENDENCIES.md`。
 
-## 4. 設計原則 (Design Principles)
+## 4. 命名規範 (Naming Convention)
+
+- **語言**：目錄名與檔案名一律使用英文，採 kebab-case 格式。中文僅用於文件內容、註解與 commit message。
+- **一致性**：同層級的目錄與檔案應有統一的命名風格，避免混用 camelCase、snake_case 與 kebab-case。
+
+## 5. 設計原則 (Design Principles)
 
 - **關注點分離**：不同層級（global vs. project）、不同職責的邏輯必須嚴格分開，不得混入同一個檔案或設定。
 - **設計一致性**：同類的問題應採用相同的設計語言（例如同樣採用 Strategy Pattern、同樣的 config-driven 方式），不可一個用策略模式、另一個 hardcode。
