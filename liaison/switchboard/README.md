@@ -24,10 +24,13 @@ switchboard/
 │   ├── skills/         # 輔助技能
 │   └── workflows/      # 自動化工作流
 ├── src/
-│   ├── channels/       # 各平台 channel 介接層
-│   ├── processors/     # 訊息分析與任務提取
-│   ├── output/         # 任務清單與通知輸出
-│   └── core/           # 核心協調邏輯
+│   ├── channels/               # 各平台 channel 介接層
+│   │   └── line/
+│   │       ├── personal/       # CDP tap LINE Chrome extension（個人帳號）
+│   │       └── official/       # LINE Messaging API（官方帳號，webhook + push）
+│   ├── processors/             # 訊息分析與任務提取
+│   ├── output/                 # 任務清單與通知輸出
+│   └── core/                   # 核心協調邏輯
 ├── README.md
 ├── AGENT_PLAN.md
 ├── ASK_HUMAN.md

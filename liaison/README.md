@@ -65,8 +65,9 @@ liaison/
 
 ## 目前 Channel 狀態
 
-| Channel | Inbound | Outbound |
-|---------|---------|----------|
-| LINE (CDP) | ✅ `capture.py` 可用 | ⬜ 待建立 |
-| Discord | ⬜ | ⬜ |
-| Trello | ⬜ | ⬜ |
+| Channel | Inbound | Outbound | 說明 |
+|---------|---------|----------|------|
+| LINE 個人帳號 | ✅ `capture.py` 可用 | ⬜ 待建立 | CDP tap LINE Chrome extension，不動未讀狀態 |
+| LINE 官方帳號 | ⬜ 待建立 | ⬜ 待建立 | Messaging API：inbound 靠 webhook，outbound 靠 push/reply API |
+| Discord | ⬜ | ⬜ | |
+| Trello | ⬜ | ⬜ | |
