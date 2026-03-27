@@ -5,48 +5,51 @@ qr.py - LINE QR code 取得、顯示與登入狀態監聽
   show_and_wait(page, qr_port)  顯示 QR code，等待登入，印出確認號碼
 """
 
-import asyncio, http.server, io, json, socket, sys, threading
+import asyncio, base64, http.server, io, socket, sys, threading
 from playwright.async_api import Page
+from PIL import Image
+import zxingcpp
 import qrcode as qrlib
 
 
-_QR_URL_TEMPLATE = "https://liff.line.me/login-auth/qr?authSessionId={}"
-_QR_API_PATH     = "createS"   # LINE GW endpoint 含此字串
+# ── QR data 取得（canvas decode）─────────────────────────────────
 
-
-# ── QR data 取得（攔截 network response）────────────────────────
-
-async def _fetch_auth_session_id(page: Page) -> str | None:
-    """點 refresh，攔截 LINE GW response（含 service worker），回傳 authSessionId"""
-    future: asyncio.Future = asyncio.get_event_loop().create_future()
-
-    async def on_response(resp):
-        if future.done(): return
-        if _QR_API_PATH not in resp.url: return
-        try:
-            body = await resp.body()
-            data = json.loads(body)
-            sid = data.get("data", {}).get("authSessionId")
-            if sid:
-                future.set_result(sid)
-        except Exception:
-            pass
-
-    ctx = page.context
-    ctx.on("response", on_response)
+async def _trigger_and_get_canvas(page: Page) -> bytes | None:
+    """點 refresh，等 canvas 有內容，回傳 PNG bytes"""
     await page.evaluate("""() => {
         document.querySelector('[class*="button_refresh"]')?.click();
     }""")
-    try:
-        return await asyncio.wait_for(future, timeout=15)
-    except asyncio.TimeoutError:
+    # 等 canvas 被畫上內容
+    for _ in range(30):
+        length = await page.evaluate("""() => {
+            const c = document.querySelector('[class*="thumbnail"] canvas, canvas');
+            return c ? c.toDataURL().length : 0;
+        }""")
+        if length > 5000:
+            break
+        await asyncio.sleep(0.5)
+    data_url = await page.evaluate("""() => {
+        const c = document.querySelector('[class*="thumbnail"] canvas, canvas');
+        return c ? c.toDataURL('image/png') : null;
+    }""")
+    if not data_url:
         return None
-    finally:
-        ctx.remove_listener("response", on_response)
+    return base64.b64decode(data_url.split(",")[1])
+
+
+def _decode_qr(png: bytes) -> str | None:
+    """從 PNG bytes 解碼 QR，scale=5 優先（LINE canvas 115px 需放大）"""
+    img = Image.open(io.BytesIO(png))
+    for scale in (5, 3, 1):
+        big = img.resize((img.width * scale, img.height * scale), Image.NEAREST)
+        results = zxingcpp.read_barcodes(big)
+        if results:
+            return results[0].text
+    return None
 
 
 def _make_png(qr_url: str) -> bytes:
-    """從 URL 生成 QR code PNG bytes"""
+    """從 URL 生成清晰的 QR code PNG（供 HTTP server 用）"""
     qr = qrlib.QRCode(border=2)
     qr.add_data(qr_url)
     qr.make(fit=True)
@@ -153,16 +156,17 @@ async def _wait_for_login_page(page: Page) -> str:
 # ── 顯示 QR ──────────────────────────────────────────────────────
 
 async def _display_qr(page: Page, qr_port: int) -> http.server.HTTPServer:
-    """攔截 QR session ID，顯示 QR，等使用者按 Enter"""
-    sid = await _fetch_auth_session_id(page)
-    if not sid:
-        print("（無法取得 QR session ID）")
-        srv = _serve(qr_port, b"")
-    else:
-        qr_url = _QR_URL_TEMPLATE.format(sid)
+    """從 canvas 解碼 QR URL，顯示 QR，等使用者按 Enter"""
+    canvas_png = await _trigger_and_get_canvas(page)
+    qr_url = _decode_qr(canvas_png) if canvas_png else None
+
+    if qr_url:
         _print_terminal(qr_url)
         png = _make_png(qr_url)
-        srv = _serve(qr_port, png)
+    else:
+        print("（無法取得 QR）")
+        png = b""
+    srv = _serve(qr_port, png)
 
     ip = _local_ip()
     print(f"\n{'━' * 45}")
