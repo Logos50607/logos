@@ -156,28 +156,31 @@ async def _display_qr(page: Page, qr_port: int) -> http.server.HTTPServer:
 
 
 async def _poll_until_done(page: Page, srv: http.server.HTTPServer) -> None:
-    """輪詢登入狀態直到完成"""
+    """輪詢登入狀態直到完成（每 2 秒檢查一次）"""
+    import asyncio
     prev = "qr"
     while True:
-        await page.wait_for_selector(
-            'canvas,[class*="verify"],[class*="pincode"],[class*="chatList"],[class*="conversationList"]',
-            timeout=120000)
+        await asyncio.sleep(2)
         state, number = await _state(page)
+
         if state == "number" and prev != "number":
             print(f"\n┌─────────────────────┐")
             print(f"│  確認號碼：  {number:>3}     │")
             print(f"│  在手機上點確認      │")
             print(f"└─────────────────────┘")
+        elif state == "done":
+            print("\n✓ 登入成功！")
+            srv.shutdown()
+            return
+        elif state == "qr":
+            # QR 可能已刷新，同步更新 HTTP server 的圖片
             try:
                 new_png = await _get_qr_png(page)
                 if new_png:
                     _Handler.png = new_png
             except Exception:
                 pass
-        elif state == "done":
-            print("\n✓ 登入成功！")
-            srv.shutdown()
-            return
+
         prev = state
 
 
