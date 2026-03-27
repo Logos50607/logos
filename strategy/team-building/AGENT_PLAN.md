@@ -17,8 +17,11 @@
 
 - [x] 2026-03-26 將所有 GitHub repo 按組別分類，產出 REPO_CLASSIFICATION.md
 - [x] 2026-03-27 將 logos repo 從 polyrepo 重組為 monorepo，所有組別統一於 `Logos50607/logos`
-- [x] 2026-03-27 education/logos 改名為 education/global-disciplines，.git 提升至 repo root
-- [x] 2026-03-27 個人/待分類專案移至 `/data/personal/`
+- [x] 2026-03-27 education/logos 改名為 education/global-disciplines，`.git` 提升至 `/data/logos/` repo root
+- [x] 2026-03-27 移除子 repo 的 `.git`（team-building, scheduling, skill-adoption, dotfiles）併入 monorepo
+- [x] 2026-03-27 清除舊 superpowers submodule 設定，改為直接納入
+- [x] 2026-03-27 個人/待分類專案從 `_uncategorized/` 移至 `/data/personal/`
+- [x] 2026-03-27 推送 monorepo 至 GitHub `Logos50607/logos`，history 完整保留
 - [ ] 2026-03-26 建立各組別的 README.md 說明職責與規範
 
 ## 待分類專案
