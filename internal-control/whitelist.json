@@ -1,0 +1,29 @@
+[
+  {
+    "name": "line-personal-session",
+    "description": "LINE Chrome 個人帳號 session 目錄路徑（CDP 用）",
+    "type": "path",
+    "path": "line-personal/",
+    "consumers": [
+      "liaison/switchboard"
+    ]
+  },
+  {
+    "name": "line-official-channel-secret",
+    "description": "LINE Messaging API Channel Secret",
+    "type": "file",
+    "path": "line-official/channel-secret",
+    "consumers": [
+      "liaison/switchboard"
+    ]
+  },
+  {
+    "name": "line-official-channel-token",
+    "description": "LINE Messaging API Channel Access Token",
+    "type": "file",
+    "path": "line-official/channel-access-token",
+    "consumers": [
+      "liaison/switchboard"
+    ]
+  }
+]
