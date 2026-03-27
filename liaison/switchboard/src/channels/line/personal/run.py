@@ -51,7 +51,7 @@ async def main(cdp_url: str, qr_port: int) -> None:
         # 6. 顯示 QR code，等待登入，印出確認號碼
         await qr.show_and_wait(line_page, qr_port)
 
-    print(f"\n下一步：uv run {SCRIPT_DIR}/capture.py --duration 60")
+    print(f"\n下一步：uv run {SCRIPT_DIR}/capture.py")
 
 
 if __name__ == "__main__":
