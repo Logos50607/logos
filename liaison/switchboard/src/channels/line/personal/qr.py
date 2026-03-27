@@ -35,7 +35,10 @@ def _print_terminal(data: str) -> None:
     qr = qrlib.QRCode(border=1)
     qr.add_data(data)
     qr.make(fit=True)
-    qr.print_ascii(invert=True)
+    try:
+        qr.print_ascii(invert=True, tty=True)   # 半格字元，佔空間較小
+    except OSError:
+        qr.print_ascii(invert=True)
 
 
 def _local_ip() -> str:
@@ -61,9 +64,26 @@ class _ReuseServer(http.server.HTTPServer):
     allow_reuse_address = True
 
 
+def _free_port(port: int) -> None:
+    """若 port 已被佔用則嘗試 kill 占用的 process"""
+    import subprocess
+    r = subprocess.run(["fuser", f"{port}/tcp"], capture_output=True, text=True)
+    for pid in r.stdout.split():
+        try:
+            import os, signal
+            os.kill(int(pid), signal.SIGTERM)
+        except Exception:
+            pass
+
+
 def _serve(port: int, png: bytes) -> http.server.HTTPServer:
     _Handler.png = png
-    srv = _ReuseServer(("0.0.0.0", port), _Handler)
+    try:
+        srv = _ReuseServer(("0.0.0.0", port), _Handler)
+    except OSError:
+        _free_port(port)
+        import time; time.sleep(1)
+        srv = _ReuseServer(("0.0.0.0", port), _Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv
 
@@ -126,9 +146,12 @@ async def _display_qr(page: Page, qr_port: int) -> http.server.HTTPServer:
     else:
         print("（無法在 terminal 顯示 QR）")
     srv = _serve(qr_port, png or b"")
-    print(f"\n━━━  掃描 QR code 登入 LINE  ━━━")
-    print(f"備用圖片：http://{_local_ip()}:{qr_port}/")
-    print("━" * 35)
+    ip = _local_ip()
+    print(f"\n{'━' * 45}")
+    print(f"  用手機掃描上方 QR code 登入 LINE")
+    print(f"  （若 QR 太大，請改掃這個網址的圖片）")
+    print(f"  http://{ip}:{qr_port}/")
+    print(f"{'━' * 45}")
     return srv
 
 
