@@ -1,0 +1,7 @@
+[user]
+	name = Logos as a philosopher
+	email = yures611@gmail.com
+[credential]
+	helper = store
+[http]
+	postBuffer = 524288000

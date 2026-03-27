@@ -1,17 +1,15 @@
-# Sensitive data
-oauth_creds.json
-google_accounts.json
-installation_id
-projects.json
-settings.json
-trustedFolders.json
+# OS
+.DS_Store
+Thumbs.db
 
-# Volatile or large directories
-antigravity-browser-profile/
-history/
-tmp/
-state.json
+# Editor
+*.swp
+*.swo
+*~
 
-# Backup files
-*.orig
-antigravity/
+# Claude Code
+.claude/
+
+# Environment
+.env
+.env.*
