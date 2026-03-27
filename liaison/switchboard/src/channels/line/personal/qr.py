@@ -150,6 +150,10 @@ async def _state(page: Page) -> tuple[str, str | None]:
 
 async def _wait_for_login_page(page: Page) -> str:
     """等登入頁或已登入，回傳最終 state"""
+    # 先檢查 URL hash（已登入時直接跳 #/friends 等，不會有 loginPage 元素）
+    state, _ = await _state(page)
+    if state == "done":
+        return state
     await page.wait_for_selector(
         '[class*="loginPage"],[class*="chatList"],[class*="conversationList"]',
         timeout=15000)
