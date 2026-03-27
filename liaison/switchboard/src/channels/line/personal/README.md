@@ -61,4 +61,4 @@ uv run capture.py --duration 120 --output /tmp/line-capture.json
 |------|------|
 | Inbound capture | ✅ `capture.py` |
 | Outbound send | ⬜ 待建立 |
-| Message processor | ⬜ 待建立（見 `processors/`）|
+| Message processor | ✅ `src/processors/line_personal.py` |

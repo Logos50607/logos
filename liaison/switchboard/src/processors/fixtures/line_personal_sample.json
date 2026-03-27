@@ -1,0 +1,129 @@
+[
+  {
+    "type": "http",
+    "src": "sw",
+    "ts": 1711468800.0,
+    "method": "GET",
+    "url": "https://line-chrome-gw.line-apps.com/S4",
+    "status": 200,
+    "req_headers": {},
+    "body": {
+      "count": 2,
+      "revision": 100,
+      "operations": [
+        {
+          "revision": 98,
+          "createdTime": 1711468795000,
+          "type": 26,
+          "reqSeq": 0,
+          "message": {
+            "id": "msg001",
+            "to": "u_receiver123",
+            "from": "u_sender456",
+            "contentType": 0,
+            "text": "今天要開會嗎？",
+            "createdTime": 1711468795000,
+            "toType": 1
+          }
+        },
+        {
+          "revision": 99,
+          "createdTime": 1711468810000,
+          "type": 26,
+          "reqSeq": 1,
+          "message": {
+            "id": "msg002",
+            "to": "u_receiver123",
+            "from": "u_friend789",
+            "contentType": 0,
+            "text": "記得帶文件！",
+            "createdTime": 1711468808000,
+            "toType": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "type": "http",
+    "src": "sw",
+    "ts": 1711468820.0,
+    "method": "GET",
+    "url": "https://line-chrome-gw.line-apps.com/S4",
+    "status": 200,
+    "req_headers": {},
+    "body": {
+      "count": 0,
+      "revision": 101,
+      "operations": []
+    }
+  },
+  {
+    "type": "http",
+    "src": "sw",
+    "ts": 1711468830.0,
+    "method": "POST",
+    "url": "https://line-chrome-gw.line-apps.com/S4",
+    "status": 200,
+    "req_headers": {},
+    "body": {
+      "count": 1,
+      "revision": 102,
+      "operations": [
+        {
+          "revision": 100,
+          "createdTime": 1711468825000,
+          "type": 27,
+          "message": {
+            "id": "msg003",
+            "to": "u_sender456",
+            "from": "u_receiver123",
+            "contentType": 0,
+            "text": "好，等等見！",
+            "createdTime": 1711468825000,
+            "toType": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "type": "http",
+    "src": "sw",
+    "ts": 1711468840.0,
+    "method": "GET",
+    "url": "https://other-service.example.com/api",
+    "status": 200,
+    "req_headers": {},
+    "body": { "data": "should be ignored" }
+  },
+  {
+    "type": "http",
+    "src": "sw",
+    "ts": 1711468850.0,
+    "method": "GET",
+    "url": "https://line-chrome-gw.line-apps.com/S4",
+    "status": 200,
+    "req_headers": {},
+    "body": {
+      "count": 1,
+      "revision": 103,
+      "operations": [
+        {
+          "revision": 101,
+          "createdTime": 1711468848000,
+          "type": 26,
+          "message": {
+            "id": "msg004",
+            "to": "u_receiver123",
+            "from": "u_sender456",
+            "contentType": 1,
+            "contentMetadata": {},
+            "createdTime": 1711468848000,
+            "toType": 1
+          }
+        }
+      ]
+    }
+  }
+]

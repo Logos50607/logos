@@ -45,6 +45,12 @@ switchboard/
 # 1. 啟動 Chrome（見 src/channels/line/personal/README.md）
 # 2. 開始錄製
 uv run src/channels/line/personal/capture.py --duration 60
+
+# 3. 解析訊息
+python3 src/processors/line_personal.py --input src/channels/line/personal/captured.json
+
+# 4. 查看 operation type 統計（探索資料結構用）
+python3 src/processors/line_personal.py --input src/channels/line/personal/captured.json --discover
 ```
 
 ## 實作原理 (Implementation Details)
@@ -66,6 +72,6 @@ uv run src/channels/line/personal/capture.py --duration 60
 | LINE 個人 outbound（CDP send） | ⬜ |
 | LINE 官方 inbound（webhook） | ⬜ |
 | LINE 官方 outbound（push/reply） | ⬜ |
-| Processors（訊息解析） | ⬜ |
+| Processors（訊息解析） | ✅ LINE personal（`src/processors/line_personal.py`）|
 | Output（任務輸出） | ⬜ |
 | Core pipeline | ⬜ |
