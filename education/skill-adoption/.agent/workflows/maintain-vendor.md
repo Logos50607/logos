@@ -9,23 +9,28 @@ description: "檢查已掛載的外部來源是否需要更新、退場或內化
 
 ## 架構
 
-本工作流分為兩層：
+本工作流分為兩層，**可直接呼叫，不依賴排程**：
 
-1. **腳本層**（`scripts/maintain-vendor.sh`）：執行機械性 git 操作，蒐集狀態資料，輸出結構化報告。
-2. **評估層**：腳本透過 `claude -p` 將報告餵給 AI，由 AI 依據決策邏輯判斷處置方式並執行。
+1. **腳本層**（`scripts/maintain-vendor.sh`）：執行機械性 git 操作，蒐集狀態資料，輸出結構化 JSON 報告。
+2. **評估層**：透過 `claude -p` 將報告餵給 AI，由 AI 依據決策邏輯判斷處置方式並執行。
 
 ```
-cron (營運組註冊)
-  → scripts/maintain-vendor.sh <target-repo>
-    → git fetch / diff / log（蒐集狀態）
-    → 產出 JSON 狀態報告
-    → claude -p "依據報告與決策邏輯，判斷處置方式並執行"
-      → 更新 / 退場 / 內化 / 維持現狀
-      → 更新 records/ 紀錄
-      → /git-commit
+scripts/maintain-vendor.sh <target-repo>
+  → git fetch / diff / log（蒐集狀態）
+  → 產出 JSON 狀態報告
+  → claude -p（見 .agent/schedules/prompts/maintain-vendor-eval.prompt.md）
+    → 更新 / 退場 / 內化 / 維持現狀
+    → 更新 records/ 紀錄
+    → /git-commit
 ```
 
-完成後須至營運組註冊排程觸發（建議每季一次）。
+## 直接執行
+
+```bash
+bash /data/logos/education/skill-adoption/scripts/maintain-vendor.sh <target-repo-path>
+```
+
+> 若需定期自動執行，排程宣告見 `.agent/schedules/maintain-vendor.manifest.md`，由營運組負責收集與觸發。
 
 ## 腳本層：scripts/maintain-vendor.sh
 
@@ -176,14 +181,6 @@ $report
 - 每項處置前先列出判斷依據與預計操作，請示使用者核可後再執行。
 - 若判斷有模糊地帶（如 divergence_pct 接近 50%），將疑慮寫入 ASK_HUMAN.md。"
 ```
-
-## 排程註冊
-
-腳本完成後，須至**營運組**註冊定期排程：
-
-- 建議頻率：每季一次
-- 觸發方式：由營運組的排程機制呼叫 `scripts/maintain-vendor.sh`
-- 需提供營運組的資訊：腳本路徑、目標 repo 清單、排程頻率
 
 ## 實作歸屬
 
