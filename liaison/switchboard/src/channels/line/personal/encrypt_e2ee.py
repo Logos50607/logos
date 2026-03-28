@@ -31,17 +31,21 @@ _SANDBOX_JS = """(data) => new Promise((resolve) => {
     const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
     if (!iframe) { resolve({error: "no iframe"}); return; }
     const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
-    const handler = (evt) => {
-        const d = evt.data;
-        if (d && d.sandboxId === sandboxId &&
-            (d.type === "response" || d.type === "error")) {
-            window.removeEventListener("message", handler);
-            resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
-        }
-    };
-    window.addEventListener("message", handler);
-    iframe.contentWindow.postMessage({sandboxId, type: "request", data}, "*");
-    setTimeout(() => resolve({error: "timeout"}), 8000);
+    // 先等 40ms 讓殘留訊息散盡，再安裝 handler；decrypt_with_storage_key 回傳字串，過濾非字串
+    setTimeout(() => {
+        const handler = (evt) => {
+            const d = evt.data;
+            if (d && d.sandboxId === sandboxId &&
+                (d.type === "response" || d.type === "error")) {
+                if (d.type === "response" && typeof d.data !== "string") return;
+                window.removeEventListener("message", handler);
+                resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
+            }
+        };
+        window.addEventListener("message", handler);
+        iframe.contentWindow.postMessage({sandboxId, type: "request", data}, "*");
+        setTimeout(() => resolve({error: "timeout"}), 8000);
+    }, 40);
 })"""
 
 _LOAD_KEY_JS = """([kb64]) => new Promise((resolve) => {
@@ -106,8 +110,8 @@ _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((reso
             const d = evt.data;
             if (d && d.sandboxId === sandboxId &&
                 (d.type === "response" || d.type === "error")) {
-                // e2eechannel_encrypt_v2 回傳 ArrayBuffer，過濾非 ArrayBuffer 回應（stale messages）
-                if (d.type === "response" && !(d.data instanceof ArrayBuffer)) return;
+                // e2eechannel_encrypt_v2 回傳 ArrayBuffer 或 Uint8Array，過濾非 binary 回應（stale messages）
+                if (d.type === "response" && !(d.data instanceof ArrayBuffer) && !ArrayBuffer.isView(d.data)) return;
                 window.removeEventListener("message", handler);
                 if (d.type === "error") { resolve({error: String(d.data)}); return; }
                 const e = new Uint8Array(d.data);
@@ -131,8 +135,7 @@ _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((reso
 async def _load_my_key(page, my_mid: str, sender_key_id: int) -> int:
     """載入私鑰至 wasm，回傳 ltsmKeyId。
 
-    decrypt_with_storage_key 若直接回傳整數（ltsmKeyId），直接使用；
-    否則（回傳 JSON）從 exportedKeyMap 取出 key bytes，呼叫 e2eekey_load_key。
+    decrypt_with_storage_key 回傳 JSON，從 exportedKeyMap 取出 key bytes，呼叫 e2eekey_load_key。
     """
     enc = await page.evaluate(f"localStorage.getItem('lcs_secure_{my_mid}')")
     if not enc:
@@ -140,9 +143,7 @@ async def _load_my_key(page, my_mid: str, sender_key_id: int) -> int:
     r = await page.evaluate(_SANDBOX_JS, {'command': 'decrypt_with_storage_key', 'payload': enc})
     if 'error' in r:
         raise RuntimeError(f"decrypt_with_storage_key 失敗: {r['error']}")
-    if isinstance(r['ok'], int):
-        return r['ok']
-    # JSON returned: 從 exportedKeyMap 取 key bytes，透過 e2eekey_load_key 取得 ltsmKeyId
+    # 從 exportedKeyMap 取 key bytes，透過 e2eekey_load_key 取得 ltsmKeyId
     import json as _json
     store = _json.loads(r['ok'])
     key_b64 = store.get('exportedKeyMap', {}).get(str(sender_key_id))

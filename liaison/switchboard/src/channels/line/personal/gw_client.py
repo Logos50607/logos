@@ -106,6 +106,8 @@ async def compute_hmac(page, access_token: str, path: str, body: str) -> str:
                 if (d && d.sandboxId === sandboxId && (d.type === "response" || d.type === "error")) {
                     // get_hmac 回傳字串，過濾非字串殘留訊息（整數、ArrayBuffer、物件）
                     if (d.type === "response" && typeof d.data !== "string") return;
+                    // get_hmac 只會拋 ltsm_not_ready；channel/key 相關錯誤是 extension 背景操作的 stale
+                    if (d.type === "error" && !String(d.data).includes("not_ready")) return;
                     window.removeEventListener("message", handler);
                     resolve(d.type === "response" ? {hmac: d.data} : {error: d.data});
                 }
