@@ -19,9 +19,26 @@ chat_client.py - chat.line.biz API 共用工具
 # 6. send_image
 # 7. get_streaming_token
 
-import json, random, time
+import json, os, random, time
 
 BASE = "https://chat.line.biz"
+
+
+# ── 1b. 白名單 ─────────────────────────────────────────────────
+
+def check_whitelist(chat_id: str) -> None:
+    """若 chat_id 不在 LINE_OA_CHAT_WHITELIST 則拋出 PermissionError。"""
+    raw = os.environ.get("LINE_OA_CHAT_WHITELIST", "")
+    allowed = {c.strip() for c in raw.split(",") if c.strip()}
+    if not allowed:
+        raise PermissionError(
+            "LINE_OA_CHAT_WHITELIST 未設定，拒絕存取。"
+            "請在 ~/.bashrc 設定允許的 chat ID。"
+        )
+    if chat_id not in allowed:
+        raise PermissionError(
+            f"chat_id {chat_id!r} 不在白名單內，拒絕存取。"
+        )
 
 
 # ── 2. warmup ──────────────────────────────────────────────────
@@ -58,6 +75,7 @@ async def get_chats(ctx, xsrf: str, bot_id: str, limit: int = 25) -> list:
 
 async def get_messages(ctx, xsrf: str, bot_id: str, chat_id: str,
                        limit: int = 20) -> list:
+    check_whitelist(chat_id)
     r = await ctx.request.fetch(
         f"{BASE}/api/v3/bots/{bot_id}/chats/{chat_id}/messages?limit={limit}",
         headers={"X-XSRF-TOKEN": xsrf, "Origin": BASE},
@@ -69,6 +87,7 @@ async def get_messages(ctx, xsrf: str, bot_id: str, chat_id: str,
 
 async def send_message(ctx, xsrf: str, bot_id: str,
                        chat_id: str, text: str) -> dict:
+    check_whitelist(chat_id)
     send_id = f"{chat_id}_{int(time.time() * 1000)}_{random.randint(10000000, 99999999)}"
     body = {"id": "", "type": "textV2", "text": text, "sendId": send_id}
     r = await ctx.request.fetch(
@@ -93,6 +112,7 @@ _MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
 async def send_image(ctx, xsrf: str, bot_id: str,
                      chat_id: str, file_path) -> dict:
     """上傳圖片並傳送至指定聊天室。"""
+    check_whitelist(chat_id)
     from pathlib import Path as _Path
     p = _Path(file_path)
     mime = _MIME.get(p.suffix.lower(), "image/jpeg")
