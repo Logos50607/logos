@@ -72,6 +72,23 @@ async def get_access_token(page) -> str:
     return token['v']
 
 
+# ── 3b. get_obs_token ─────────────────────────────────────────────
+
+_PATH_ENC_TOKEN = "/api/talk/thrift/Talk/TalkService/acquireEncryptedAccessToken"
+
+async def get_obs_token(page, gw_token: str) -> str:
+    """呼叫 acquireEncryptedAccessToken(type=2=OBS_GENERAL)，回傳 OBS 用 token。"""
+    body_obj = [2]
+    body_str = json.dumps(body_obj)
+    hmac = await compute_hmac(page, gw_token, _PATH_ENC_TOKEN, body_str)
+    result = call_api(_PATH_ENC_TOKEN, body_obj, gw_token, hmac)
+    if result.get('code') != 0:
+        raise RuntimeError(f"acquireEncryptedAccessToken 失敗: {result}")
+    data = result.get('data', '')
+    # format: "<expiry>\x1e<encrypted_token>"
+    return data.split('\x1e', 1)[-1]
+
+
 # ── 4. compute_hmac ──────────────────────────────────────────────
 
 async def compute_hmac(page, access_token: str, path: str, body: str) -> str:
