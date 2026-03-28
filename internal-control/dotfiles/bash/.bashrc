@@ -135,3 +135,5 @@ antigravity() {
 
 # Turso
 export PATH="$PATH:/home/logos/.turso"
+
+. "$HOME/.local/bin/env"
