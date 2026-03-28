@@ -5,20 +5,24 @@
 encrypt_e2ee.py - LINE E2EE V2 加密（透過 ltsmSandbox postMessage，無需 UI）
 
 流程：
-  1. decrypt_with_storage_key → 取得匯出私鑰（base64）
-  2. e2eekey_load_key(Uint8Array) → keyLtsmId
-  3. e2eekey_create_channel(keyLtsmId, recipientPubKeyBytes) → channelLtsmId
-  4. e2eechannel_encrypt_v2(channelLtsmId, ...) → raw bytes → vL chunks
+  1. decrypt_with_storage_key(blob) → ltsmKeyId（第二次呼叫時直接回傳整數）
+  2. e2eekey_create_channel(ltsmKeyId, recipientPubKeyBytes) → channelLtsmId
+  3. e2eechannel_encrypt_v2(channelLtsmId, ...) → raw bytes → vL chunks
 
 公開函式：
   encrypt_message(page, to, from_mid, sender_key_id, receiver_key_id,
-                  receiver_pub_key_b64, seq_num, text) -> list[str]
+                  receiver_pub_key_b64, seq_num, plaintext_json) -> list[str]
+
+  plaintext_json：完整 JSON 字串（文字: {"text":"…"}，圖片: {"keyMaterial":"…"}）
+
+注意：decrypt_with_storage_key 同時執行解密與金鑰載入（wasm 初始化副作用）。
+     第一次呼叫（get_my_info）回傳 JSON 並載入金鑰；
+     第二次呼叫（_load_my_key）金鑰已在 wasm，直接回傳 ltsmKeyId（整數）。
 """
 
 # ── 目錄 ─────────────────────────────────────────────────────────
-# 1. _sandbox(page, data)       - postMessage 單次 request/response
-# 2. _load_my_key(page, mid, key_id) - 解密 localStorage → 載入 wasm
-# 3. encrypt_message(...)       - 公開入口
+# 1. _load_my_key(page, mid, key_id) - decrypt_with_storage_key → ltsmKeyId
+# 2. encrypt_message(...)            - 公開入口
 
 import asyncio
 import json
@@ -49,6 +53,8 @@ _LOAD_KEY_JS = """([kb64]) => new Promise((resolve) => {
         const d = evt.data;
         if (d && d.sandboxId === sandboxId &&
             (d.type === "response" || d.type === "error")) {
+            // e2eekey_load_key 回傳整數 ltsmKeyId，過濾非整數回應（stale messages）
+            if (d.type === "response" && typeof d.data !== "number") return;
             window.removeEventListener("message", handler);
             resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
         }
@@ -64,18 +70,23 @@ _CREATE_CHANNEL_JS = """([keyId, pubB64]) => new Promise((resolve) => {
     if (!iframe) { resolve({error: "no iframe"}); return; }
     const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
     const payload = Uint8Array.from(atob(pubB64), c => c.charCodeAt(0));
-    const handler = (evt) => {
-        const d = evt.data;
-        if (d && d.sandboxId === sandboxId &&
-            (d.type === "response" || d.type === "error")) {
-            window.removeEventListener("message", handler);
-            resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
-        }
-    };
-    window.addEventListener("message", handler);
-    iframe.contentWindow.postMessage({sandboxId, type: "request",
-        data: {command: "e2eekey_create_channel", ltsmKeyId: keyId, payload}}, "*");
-    setTimeout(() => resolve({error: "timeout"}), 8000);
+    // 先等 40ms，讓前序 sandbox 操作的殘留訊息散盡，再安裝 handler
+    setTimeout(() => {
+        const handler = (evt) => {
+            const d = evt.data;
+            if (d && d.sandboxId === sandboxId &&
+                (d.type === "response" || d.type === "error")) {
+                // e2eekey_create_channel 回傳整數 channelLtsmId，過濾非整數回應（stale messages）
+                if (d.type === "response" && typeof d.data !== "number") return;
+                window.removeEventListener("message", handler);
+                resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
+            }
+        };
+        window.addEventListener("message", handler);
+        iframe.contentWindow.postMessage({sandboxId, type: "request",
+            data: {command: "e2eekey_create_channel", ltsmKeyId: keyId, payload}}, "*");
+        setTimeout(() => resolve({error: "timeout"}), 8000);
+    }, 40);
 })"""
 
 _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((resolve) => {
@@ -89,48 +100,58 @@ _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((reso
         return b;
     };
     const RR = b => btoa(String.fromCharCode.apply(null, Array.from(b)));
-    const handler = (evt) => {
-        const d = evt.data;
-        if (d && d.sandboxId === sandboxId &&
-            (d.type === "response" || d.type === "error")) {
-            window.removeEventListener("message", handler);
-            if (d.type === "error") { resolve({error: String(d.data)}); return; }
-            const e = new Uint8Array(d.data);
-            // vL: [IV(0:16), ciphertext(28:), seqKeyId(16:28), senderKeyId, receiverKeyId]
-            resolve({ok: [RR(e.slice(0,16)), RR(e.slice(28)), RR(e.slice(16,28)),
-                          RR(LR(sKId,4)), RR(LR(rKId,4))]});
-        }
-    };
-    window.addEventListener("message", handler);
-    iframe.contentWindow.postMessage({sandboxId, type: "request",
-        data: {command: "e2eechannel_encrypt_v2", ltsmKeyId: chId,
-               payload: {to, from: frm, senderKeyId: sKId, receiverKeyId: rKId,
-                         contentType: 0, sequenceNumber: BigInt(seqN), plaintext: ptBytes}}}, "*");
-    setTimeout(() => resolve({error: "timeout"}), 8000);
+    // 先等 40ms，讓前序 sandbox 操作的殘留訊息散盡，再安裝 handler
+    setTimeout(() => {
+        const handler = (evt) => {
+            const d = evt.data;
+            if (d && d.sandboxId === sandboxId &&
+                (d.type === "response" || d.type === "error")) {
+                // e2eechannel_encrypt_v2 回傳 ArrayBuffer，過濾非 ArrayBuffer 回應（stale messages）
+                if (d.type === "response" && !(d.data instanceof ArrayBuffer)) return;
+                window.removeEventListener("message", handler);
+                if (d.type === "error") { resolve({error: String(d.data)}); return; }
+                const e = new Uint8Array(d.data);
+                // vL: [IV(0:16), ciphertext(28:), seqKeyId(16:28), senderKeyId, receiverKeyId]
+                resolve({ok: [RR(e.slice(0,16)), RR(e.slice(28)), RR(e.slice(16,28)),
+                              RR(LR(sKId,4)), RR(LR(rKId,4))]});
+            }
+        };
+        window.addEventListener("message", handler);
+        iframe.contentWindow.postMessage({sandboxId, type: "request",
+            data: {command: "e2eechannel_encrypt_v2", ltsmKeyId: chId,
+                   payload: {to, from: frm, senderKeyId: sKId, receiverKeyId: rKId,
+                             contentType: 0, sequenceNumber: BigInt(seqN), plaintext: ptBytes}}}, "*");
+        setTimeout(() => resolve({error: "timeout"}), 8000);
+    }, 40);
 })"""
 
 
 # ── 1. 載入私鑰 ───────────────────────────────────────────────────
 
 async def _load_my_key(page, my_mid: str, sender_key_id: int) -> int:
-    """解密 localStorage，取出私鑰，載入 wasm。回傳 keyLtsmId（整數）。"""
+    """載入私鑰至 wasm，回傳 ltsmKeyId。
+
+    decrypt_with_storage_key 若直接回傳整數（ltsmKeyId），直接使用；
+    否則（回傳 JSON）從 exportedKeyMap 取出 key bytes，呼叫 e2eekey_load_key。
+    """
     enc = await page.evaluate(f"localStorage.getItem('lcs_secure_{my_mid}')")
     if not enc:
         raise RuntimeError(f"localStorage 找不到 lcs_secure_{my_mid}")
-
     r = await page.evaluate(_SANDBOX_JS, {'command': 'decrypt_with_storage_key', 'payload': enc})
     if 'error' in r:
         raise RuntimeError(f"decrypt_with_storage_key 失敗: {r['error']}")
-
-    store = json.loads(r['ok'])
+    if isinstance(r['ok'], int):
+        return r['ok']
+    # JSON returned: 從 exportedKeyMap 取 key bytes，透過 e2eekey_load_key 取得 ltsmKeyId
+    import json as _json
+    store = _json.loads(r['ok'])
     key_b64 = store.get('exportedKeyMap', {}).get(str(sender_key_id))
     if not key_b64:
-        raise RuntimeError(f"exportedKeyMap 找不到 keyId {sender_key_id}")
-
-    r = await page.evaluate(_LOAD_KEY_JS, [key_b64])
-    if 'error' in r:
-        raise RuntimeError(f"e2eekey_load_key 失敗: {r['error']}")
-    return r['ok']
+        raise RuntimeError(f"exportedKeyMap 找不到 senderKeyId {sender_key_id}")
+    r2 = await page.evaluate(_LOAD_KEY_JS, [key_b64])
+    if 'error' in r2:
+        raise RuntimeError(f"e2eekey_load_key 失敗: {r2['error']}")
+    return r2['ok']
 
 
 # ── 2. 公開入口 ───────────────────────────────────────────────────
@@ -139,9 +160,9 @@ async def encrypt_message(page,
                           to: str, from_mid: str,
                           sender_key_id: int, receiver_key_id: int,
                           receiver_pub_key_b64: str,
-                          seq_num: int, text: str) -> list:
+                          seq_num: int, plaintext_json: str) -> list:
     """
-    E2EE V2 加密文字訊息，回傳 5 個 base64 chunks。
+    E2EE V2 加密訊息，回傳 5 個 base64 chunks。
 
     Args:
         page               - Playwright page（LINE extension）
@@ -151,7 +172,7 @@ async def encrypt_message(page,
         receiver_key_id    - 對方 E2EE key id（int）
         receiver_pub_key_b64 - 對方 Curve25519 公鑰（base64）
         seq_num            - 訊息 sequence number
-        text               - 純文字內容
+        plaintext_json     - 完整明文 JSON（文字: {"text":"…"}，圖片: {"keyMaterial":"…"}）
     """
     key_ltsm_id = await _load_my_key(page, from_mid, sender_key_id)
 
@@ -160,7 +181,6 @@ async def encrypt_message(page,
         raise RuntimeError(f"e2eekey_create_channel 失敗: {r['error']}")
     channel_ltsm_id = r['ok']
 
-    plaintext_json = json.dumps({'text': text})
     r = await page.evaluate(_ENCRYPT_V2_JS,
                             [channel_ltsm_id, to, from_mid,
                              sender_key_id, receiver_key_id, seq_num, plaintext_json])

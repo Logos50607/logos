@@ -82,6 +82,8 @@ _DECRYPT_V2_JS = """([chId, to, frm, sKId, rKId, ctType, rawB64]) => new Promise
         const d = evt.data;
         if (d && d.sandboxId === sandboxId &&
             (d.type === "response" || d.type === "error")) {
+            // e2eechannel_decrypt_v2 回傳 ArrayBuffer，過濾非 ArrayBuffer 回應（stale messages）
+            if (d.type === "response" && !(d.data instanceof ArrayBuffer)) return;
             window.removeEventListener("message", handler);
             if (d.type === "error") { resolve({error: String(d.data)}); return; }
             resolve({ok: RR(new Uint8Array(d.data))});
@@ -170,15 +172,19 @@ async def decrypt_chunks(page, token: str, message: dict) -> dict:
                             {'command': 'decrypt_with_storage_key', 'payload': enc})
     if 'error' in r:
         raise RuntimeError(f"decrypt storage 失敗: {r['error']}")
-    store = json.loads(r['ok'])
-    key_b64 = store.get('exportedKeyMap', {}).get(str(my_key_id))
-    if not key_b64:
-        raise RuntimeError(f"exportedKeyMap 找不到 keyId {my_key_id}")
 
-    r = await page.evaluate(_LOAD_KEY_JS, [key_b64])
-    if 'error' in r:
-        raise RuntimeError(f"e2eekey_load_key 失敗: {r['error']}")
-    key_ltsm_id = r['ok']
+    if isinstance(r['ok'], int):
+        # sandbox 直接回傳 ltsmKeyId
+        key_ltsm_id = r['ok']
+    else:
+        store = json.loads(r['ok'])
+        key_b64 = store.get('exportedKeyMap', {}).get(str(my_key_id))
+        if not key_b64:
+            raise RuntimeError(f"exportedKeyMap 找不到 keyId {my_key_id}")
+        r = await page.evaluate(_LOAD_KEY_JS, [key_b64])
+        if 'error' in r:
+            raise RuntimeError(f"e2eekey_load_key 失敗: {r['error']}")
+        key_ltsm_id = r['ok']
 
     # 建立 channel（我的私鑰 × 對方公鑰）
     r = await page.evaluate(_CREATE_CHANNEL_JS, [key_ltsm_id, other_pub_b64])

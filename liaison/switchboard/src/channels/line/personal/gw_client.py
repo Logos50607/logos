@@ -69,6 +69,8 @@ async def get_access_token(page) -> str:
         await page.wait_for_load_state('load', timeout=10000)
     except Exception:
         pass
+    # 額外等待，確保 ltsmSandbox wasm 完成初始化
+    await asyncio.sleep(2.0)
     return token['v']
 
 
@@ -97,20 +99,25 @@ async def compute_hmac(page, access_token: str, path: str, body: str) -> str:
         const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
         if (!iframe) return resolve({error: "no iframe"});
         const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
-        const handler = (evt) => {
-            const d = evt.data;
-            if (d && d.sandboxId === sandboxId && (d.type === "response" || d.type === "error")) {
-                window.removeEventListener("message", handler);
-                resolve(d.type === "response" ? {hmac: d.data} : {error: d.data});
-            }
-        };
-        window.addEventListener("message", handler);
-        iframe.contentWindow.postMessage({
-            sandboxId,
-            type: "request",
-            data: {command: "get_hmac", payload: {accessToken: token, path, body}}
-        }, "*");
-        setTimeout(() => resolve({error: "timeout"}), 5000);
+        // 先等 40ms，讓前序 sandbox 操作的殘留訊息散盡，再安裝 handler
+        setTimeout(() => {
+            const handler = (evt) => {
+                const d = evt.data;
+                if (d && d.sandboxId === sandboxId && (d.type === "response" || d.type === "error")) {
+                    // get_hmac 回傳字串，過濾非字串殘留訊息（整數、ArrayBuffer、物件）
+                    if (d.type === "response" && typeof d.data !== "string") return;
+                    window.removeEventListener("message", handler);
+                    resolve(d.type === "response" ? {hmac: d.data} : {error: d.data});
+                }
+            };
+            window.addEventListener("message", handler);
+            iframe.contentWindow.postMessage({
+                sandboxId,
+                type: "request",
+                data: {command: "get_hmac", payload: {accessToken: token, path, body}}
+            }, "*");
+            setTimeout(() => resolve({error: "timeout"}), 5000);
+        }, 40);
     })''', [access_token, path, body])
 
     if 'error' in result:

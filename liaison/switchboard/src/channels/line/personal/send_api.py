@@ -93,7 +93,8 @@ async def _do_send(page, to: str, text: str, token: str,
     seq_num = int(time.time() * 1000) & 0x7FFFFFFF
     chunks  = await encrypt_message(page, to, my_mid,
                                     sender_key_id, receiver_key_id,
-                                    receiver_pub_b64, seq_num, text)
+                                    receiver_pub_b64, seq_num,
+                                    json.dumps({'text': text}))
     body_obj = [seq_num, {
         "from": my_mid, "to": to, "toType": 0,
         "id": f"local-{seq_num}", "contentType": 0,
