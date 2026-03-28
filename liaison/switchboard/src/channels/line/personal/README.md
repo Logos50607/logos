@@ -96,11 +96,40 @@ LINE server 會拒絕（`ltsm_not_available`）。
 LINE canvas QR 尺寸 115×115px，以 `zxing-cpp` 放大 5x 解碼，
 取得完整 URL（含 `secret` 參數）後重新生成大圖供手機掃描。
 
+## 抓完整訊息歷史
+
+登入並執行 `capture.py fetch` 後，可再呼叫：
+
+```bash
+# 抓所有聊天室（預設每室 50 則）
+uv run fetch_messages.py
+
+# 每室抓 200 則
+uv run fetch_messages.py --count 200
+
+# 只抓指定聊天室
+uv run fetch_messages.py --chat CF8at21O... --count 100
+
+# 指定輸出路徑
+uv run fetch_messages.py --output /tmp/msgs.json
+```
+
+輸出為 `messages.json`，格式：`{messageBoxId: [message, ...]}`。
+
+### 運作原理
+
+1. 透過 CDP 連接既有 Chrome，找到 LINE extension page
+2. reload page 並攔截請求取得 `X-Line-Access` token
+3. 每次 API 呼叫前，透過 `ltsmSandbox` iframe postMessage 計算 `X-Hmac`
+4. 以 Python `urllib` 直接呼叫 LINE GW API（`getRecentMessagesV2` + `getPreviousMessagesV2WithRequest`）
+5. 從 `captured.json` 的 `getMessageBoxes` 取得所有 messageBoxId 清單
+
 ## 模組狀態
 
 | 功能 | 狀態 |
 |------|------|
 | 登入流程 | ✅ `run.py` |
 | Inbound capture | ✅ `capture.py` |
+| Fetch 完整訊息 | ✅ `fetch_messages.py` |
 | Outbound send | ⬜ 待建立 |
 | Message processor | ✅ `src/processors/line_personal.py` |
