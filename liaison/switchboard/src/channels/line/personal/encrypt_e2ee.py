@@ -37,7 +37,8 @@ _SANDBOX_JS = """(data) => new Promise((resolve) => {
             const d = evt.data;
             if (d && d.sandboxId === sandboxId &&
                 (d.type === "response" || d.type === "error")) {
-                if (d.type === "response" && typeof d.data !== "string") return;
+                // decrypt_with_storage_key 回傳 JSON，必須以 '{' 開頭；base64 或空字串是 stale
+                if (d.type === "response" && (typeof d.data !== "string" || !d.data.startsWith('{'))) return;
                 window.removeEventListener("message", handler);
                 resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
             }
@@ -48,25 +49,40 @@ _SANDBOX_JS = """(data) => new Promise((resolve) => {
     }, 40);
 })"""
 
-_LOAD_KEY_JS = """([kb64]) => new Promise((resolve) => {
+_FIND_KEY_JS = """([targetKeyId]) => new Promise((resolve) => {
+    // 掃描 pS map：用 e2eekey_get_key_id 找 extension 已載入且 keyId==targetKeyId 的 ltsmKeyId
+    // LINE keyId 是數百萬級大整數；ltsmKeyId 是小整數（1, 2, 3...），以此區分 stale messages
     const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
     if (!iframe) { resolve({error: "no iframe"}); return; }
     const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
-    const payload = Uint8Array.from(atob(kb64), c => c.charCodeAt(0));
+    let currentId = 0;
+
+    const next = () => {
+        currentId++;
+        if (currentId > 50) { resolve({error: "key not found in first 50 slots"}); return; }
+        iframe.contentWindow.postMessage({sandboxId, type: "request",
+            data: {command: "e2eekey_get_key_id", ltsmKeyId: currentId}}, "*");
+    };
+
     const handler = (evt) => {
         const d = evt.data;
-        if (d && d.sandboxId === sandboxId &&
-            (d.type === "response" || d.type === "error")) {
-            // e2eekey_load_key 回傳整數 ltsmKeyId，過濾非整數回應（stale messages）
-            if (d.type === "response" && typeof d.data !== "number") return;
-            window.removeEventListener("message", handler);
-            resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
+        if (!d || d.sandboxId !== sandboxId) return;
+        if (d.type === "response" && typeof d.data === "number") {
+            if (d.data < 1000) return;  // stale ltsmKeyId response，忽略
+            if (d.data === targetKeyId) {
+                window.removeEventListener("message", handler);
+                resolve({ok: currentId});
+            } else {
+                next();
+            }
+        } else if (d.type === "error") {
+            next();  // 此 slot 不存在，繼續
         }
     };
+
     window.addEventListener("message", handler);
-    iframe.contentWindow.postMessage({sandboxId, type: "request",
-        data: {command: "e2eekey_load_key", payload}}, "*");
-    setTimeout(() => resolve({error: "timeout"}), 8000);
+    setTimeout(next, 40);  // 40ms drain
+    setTimeout(() => { window.removeEventListener("message", handler); resolve({error: "scan timeout"}); }, 10000);
 })"""
 
 _CREATE_CHANNEL_JS = """([keyId, pubB64]) => new Promise((resolve) => {
@@ -133,26 +149,11 @@ _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((reso
 # ── 1. 載入私鑰 ───────────────────────────────────────────────────
 
 async def _load_my_key(page, my_mid: str, sender_key_id: int) -> int:
-    """載入私鑰至 wasm，回傳 ltsmKeyId。
-
-    decrypt_with_storage_key 回傳 JSON，從 exportedKeyMap 取出 key bytes，呼叫 e2eekey_load_key。
-    """
-    enc = await page.evaluate(f"localStorage.getItem('lcs_secure_{my_mid}')")
-    if not enc:
-        raise RuntimeError(f"localStorage 找不到 lcs_secure_{my_mid}")
-    r = await page.evaluate(_SANDBOX_JS, {'command': 'decrypt_with_storage_key', 'payload': enc})
+    """找到 extension 已載入的私鑰 ltsmKeyId（用 e2eekey_get_key_id 掃描）。"""
+    r = await page.evaluate(_FIND_KEY_JS, [sender_key_id])
     if 'error' in r:
-        raise RuntimeError(f"decrypt_with_storage_key 失敗: {r['error']}")
-    # 從 exportedKeyMap 取 key bytes，透過 e2eekey_load_key 取得 ltsmKeyId
-    import json as _json
-    store = _json.loads(r['ok'])
-    key_b64 = store.get('exportedKeyMap', {}).get(str(sender_key_id))
-    if not key_b64:
-        raise RuntimeError(f"exportedKeyMap 找不到 senderKeyId {sender_key_id}")
-    r2 = await page.evaluate(_LOAD_KEY_JS, [key_b64])
-    if 'error' in r2:
-        raise RuntimeError(f"e2eekey_load_key 失敗: {r2['error']}")
-    return r2['ok']
+        raise RuntimeError(f"找不到 senderKeyId {sender_key_id} 的 ltsmKeyId: {r['error']}")
+    return r['ok']
 
 
 # ── 2. 公開入口 ───────────────────────────────────────────────────

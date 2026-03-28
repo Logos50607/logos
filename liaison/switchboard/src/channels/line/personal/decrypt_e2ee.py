@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from gw_client import compute_hmac, call_api
-from encrypt_e2ee import _SANDBOX_JS, _LOAD_KEY_JS, _CREATE_CHANNEL_JS
+from encrypt_e2ee import _FIND_KEY_JS, _CREATE_CHANNEL_JS
 
 _PATH_GET_PUBKEY = "/api/talk/thrift/Talk/TalkService/getE2EEPublicKey"
 
@@ -82,8 +82,8 @@ _DECRYPT_V2_JS = """([chId, to, frm, sKId, rKId, ctType, rawB64]) => new Promise
         const d = evt.data;
         if (d && d.sandboxId === sandboxId &&
             (d.type === "response" || d.type === "error")) {
-            // e2eechannel_decrypt_v2 回傳 ArrayBuffer，過濾非 ArrayBuffer 回應（stale messages）
-            if (d.type === "response" && !(d.data instanceof ArrayBuffer)) return;
+            // e2eechannel_decrypt_v2 回傳 ArrayBuffer 或 Uint8Array，過濾非 binary 回應（stale messages）
+            if (d.type === "response" && !(d.data instanceof ArrayBuffer) && !ArrayBuffer.isView(d.data)) return;
             window.removeEventListener("message", handler);
             if (d.type === "error") { resolve({error: String(d.data)}); return; }
             resolve({ok: RR(new Uint8Array(d.data))});
@@ -164,27 +164,11 @@ async def decrypt_chunks(page, token: str, message: dict) -> dict:
     # 取得對方公鑰
     _, other_pub_b64 = await _get_sender_key(page, token, other_mid, other_key_id)
 
-    # 載入我的私鑰
-    enc = await page.evaluate(
-        f"localStorage.getItem('lcs_secure_{my_mid}')"
-    )
-    r = await page.evaluate(_SANDBOX_JS,
-                            {'command': 'decrypt_with_storage_key', 'payload': enc})
+    # 找 extension 已載入的私鑰 ltsmKeyId
+    r = await page.evaluate(_FIND_KEY_JS, [my_key_id])
     if 'error' in r:
-        raise RuntimeError(f"decrypt storage 失敗: {r['error']}")
-
-    if isinstance(r['ok'], int):
-        # sandbox 直接回傳 ltsmKeyId
-        key_ltsm_id = r['ok']
-    else:
-        store = json.loads(r['ok'])
-        key_b64 = store.get('exportedKeyMap', {}).get(str(my_key_id))
-        if not key_b64:
-            raise RuntimeError(f"exportedKeyMap 找不到 keyId {my_key_id}")
-        r = await page.evaluate(_LOAD_KEY_JS, [key_b64])
-        if 'error' in r:
-            raise RuntimeError(f"e2eekey_load_key 失敗: {r['error']}")
-        key_ltsm_id = r['ok']
+        raise RuntimeError(f"找不到 keyId {my_key_id} 的 ltsmKeyId: {r['error']}")
+    key_ltsm_id = r['ok']
 
     # 建立 channel（我的私鑰 × 對方公鑰）
     r = await page.evaluate(_CREATE_CHANNEL_JS, [key_ltsm_id, other_pub_b64])

@@ -125,11 +125,12 @@ def _obs_upload(obs_token: str, enc_data: bytes,
 # ── 4. 組 sendMessage body ────────────────────────────────────────
 
 def _build_send_body(seq_num: int, to: str, my_mid: str,
-                     oid: str, file_size: int, chunks: list) -> list:
+                     oid: str, file_size: int, chunks: list,
+                     extension: str = "jpeg") -> list:
     """組 sendMessage API body（contentType=1 圖片）。"""
     media_info = json.dumps({
         "onObs": True, "category": "original",
-        "animated": False, "extension": "jpeg",
+        "animated": False, "extension": extension,
         "fileSize": file_size,
     })
     return [seq_num, {
@@ -197,7 +198,8 @@ async def send_image(page, to: str, file_path: Path) -> dict:
                                      plaintext)
 
     print(">>> 發送訊息...", flush=True)
-    body_obj = _build_send_body(seq_num, to, my_mid, oid, file_size, chunks)
+    ext = file_path.suffix.lstrip('.').lower() or "jpeg"
+    body_obj = _build_send_body(seq_num, to, my_mid, oid, file_size, chunks, ext)
     body_str = json.dumps(body_obj)
     hmac_val = await compute_hmac(page, token, _PATH_SEND, body_str)
     result   = call_api(_PATH_SEND, body_obj, token, hmac_val)
