@@ -2,10 +2,11 @@
 # dependencies = ["playwright", "pillow", "zxing-cpp", "qrcode[pil]"]
 # ///
 """
-send.py - 透過 LINE 官方帳號傳送訊息
+send.py - 透過 LINE 官方帳號傳送訊息或圖片
 
 用法：
   uv run send.py --chat-id <chatId> --text "訊息內容"
+  uv run send.py --chat-id <chatId> --image /path/to/image.jpg
 
 auth 從 session-state.json 讀取（先跑 login.py）
 """
@@ -37,7 +38,11 @@ async def run(args) -> None:
         s = await chat_client.warmup(ctx)
         xsrf, bot_id = s["xsrf"], s["bot_id"]
 
-        result = await chat_client.send_message(ctx, xsrf, bot_id, args.chat_id, args.text)
+        if args.image:
+            result = await chat_client.send_image(ctx, xsrf, bot_id, args.chat_id, args.image)
+        else:
+            result = await chat_client.send_message(ctx, xsrf, bot_id, args.chat_id, args.text)
+
         if result["status"] == 200:
             print(f">>> 傳送成功")
         else:
@@ -50,5 +55,6 @@ async def run(args) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="透過 LINE OA 傳送訊息")
     ap.add_argument("--chat-id", required=True, help="聊天室 ID")
-    ap.add_argument("--text",    required=True, help="訊息內容")
+    ap.add_argument("--text",    default="",   help="文字訊息內容")
+    ap.add_argument("--image",   default="",   help="圖片路徑（jpg/png）")
     asyncio.run(run(ap.parse_args()))
