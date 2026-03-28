@@ -18,20 +18,12 @@ open_chat.py - 在 LINE extension UI 開啟指定聊天室
 
 import argparse
 import asyncio
-import os
+import sys
 from pathlib import Path
 from playwright.async_api import async_playwright
 
-_EXT_ID_FILE    = Path(__file__).parent / ".ext-id"
-_EXT_ID_DEFAULT = "ophjlpahpchlmihnnnihgmmeilfjmjjc"
-
-def _load_ext_id():
-    if val := os.getenv("LINE_PERSONAL_EXT_ID"): return val
-    if _EXT_ID_FILE.exists(): return _EXT_ID_FILE.read_text().strip()
-    return _EXT_ID_DEFAULT
-
-EXT_ID  = _load_ext_id()
-CDP_URL = os.getenv("LINE_PERSONAL_CDP_URL", "http://localhost:9222")
+sys.path.insert(0, str(Path(__file__).parent))
+from gw_client import EXT_ID, CDP_URL
 
 
 # ── 1. 核心函式 ───────────────────────────────────────────────────
@@ -45,19 +37,6 @@ async def open_chat(page, to: str) -> dict:
     await asyncio.sleep(1.5)
 
     sel = f'[data-mid="{to}"]'
-
-    # 找虛擬滾動容器的中心座標，用 mouse.wheel 驅動 React re-render
-    container_box = await page.evaluate('''() => {
-        for (const el of document.querySelectorAll("*")) {
-            const s = window.getComputedStyle(el);
-            if ((s.overflowY === "auto" || s.overflowY === "scroll")
-                    && el.scrollHeight > el.clientHeight + 50) {
-                const r = el.getBoundingClientRect();
-                return {x: r.left + r.width/2, y: r.top + r.height/2, h: r.height};
-            }
-        }
-        return null;
-    }''')
 
     # 滾動虛擬清單：重設至頂部，再以 Playwright mouse.wheel 驅動 React re-render
     container_info = await page.evaluate('''() => {
