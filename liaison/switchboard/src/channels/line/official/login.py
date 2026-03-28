@@ -12,7 +12,8 @@ login.py - LINE Developers Console 登入（QR code 掃描）
 直接執行（測試登入）:
   uv run login.py [--qr-port 8889]
 """
-import asyncio, base64, http.server, io, re, socket, sys, threading
+import asyncio, base64, http.server, io, os, re, socket, sys, threading
+from pathlib import Path
 from playwright.async_api import Page
 from PIL import Image
 import zxingcpp
@@ -111,6 +112,28 @@ def _local_ip() -> str:
     except Exception: return "localhost"
 
 
+# ── Session 持久化 ───────────────────────────────────────────────
+
+
+def _session_file() -> Path:
+    base = os.environ.get("LOGOS_ROOT", str(Path.home() / ".logos"))
+    return Path(base) / "secrets" / "line-official" / "session-state.json"
+
+
+async def save_session(ctx) -> None:
+    """登入成功後存 cookie，下次免登"""
+    f = _session_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    await ctx.storage_state(path=str(f))
+    print(f">>> Session 已儲存：{f}")
+
+
+def load_session() -> str | None:
+    """若有 session 檔則回傳路徑，否則 None"""
+    f = _session_file()
+    return str(f) if f.exists() else None
+
+
 # ── 登入狀態偵測 ──────────────────────────────────────────────────
 
 
@@ -137,6 +160,7 @@ async def _poll_until_done(page: Page, srv: http.server.HTTPServer) -> None:
         if host == "developers.line.biz":
             srv.shutdown()
             print("\n>>> 登入成功！")
+            await save_session(page.context)
             return
 
         try:

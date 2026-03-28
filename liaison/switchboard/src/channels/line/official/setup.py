@@ -24,6 +24,7 @@ import credentials, login, console, webhook
 
 
 async def main(args: argparse.Namespace) -> None:
+    import json
     from playwright.async_api import async_playwright
 
     provider    = args.provider     or _prompt("Provider 名稱（英文）")
@@ -31,10 +32,25 @@ async def main(args: argparse.Namespace) -> None:
     email       = args.email        or _prompt("聯絡 Email")
     webhook_url = args.webhook_url  # 可為空，稍後可單獨設定
 
+    api_log: list[dict] = []
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        ctx     = await browser.new_context()
+        ctx     = await browser.new_context(storage_state=login.load_session())
         page    = await ctx.new_page()
+
+        # --sniff：錄下所有非 GET 的 API 請求，供後續改寫成純 API 呼叫
+        if args.sniff:
+            from urllib.parse import urlparse
+            def _log_req(req):
+                host = urlparse(req.url).hostname or ""
+                if "line.biz" not in host or req.method in ("GET", "OPTIONS"):
+                    return
+                entry = {"method": req.method, "url": req.url,
+                         "headers": dict(req.headers), "body": req.post_data}
+                api_log.append(entry)
+                print(f"  [API] {req.method} {req.url}")
+            page.on("request", _log_req)
 
         # 1. 登入
         await login.ensure_logged_in(page, args.qr_port)
@@ -57,6 +73,12 @@ async def main(args: argparse.Namespace) -> None:
 
         await browser.close()
 
+    if args.sniff and api_log:
+        import json
+        out = "/tmp/api-log.json"
+        Path(out).write_text(json.dumps(api_log, indent=2, ensure_ascii=False))
+        print(f"\n>>> API log 已儲存：{out}（共 {len(api_log)} 筆）")
+
     print("\n>>> 設定完成！目前憑證：")
     credentials.show()
 
@@ -75,4 +97,5 @@ if __name__ == "__main__":
     ap.add_argument("--email",       default="", help="聯絡 Email（channel 建立必填）")
     ap.add_argument("--webhook-url", default="", help="Webhook URL（可選）")
     ap.add_argument("--qr-port",     type=int, default=8889, help="QR 圖片 HTTP port")
+    ap.add_argument("--sniff",       action="store_true", help="錄下 API 請求至 /tmp/api-log.json")
     asyncio.run(main(ap.parse_args()))
