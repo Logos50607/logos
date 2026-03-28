@@ -63,6 +63,12 @@ async def get_access_token(page) -> str:
     page.remove_listener('request', on_req)
     if 'v' not in token:
         raise RuntimeError("無法取得 X-Line-Access token，請確認已登入")
+
+    # 等頁面完全載入，確保 ltsmSandbox iframe 初始化完成
+    try:
+        await page.wait_for_load_state('load', timeout=10000)
+    except Exception:
+        pass
     return token['v']
 
 

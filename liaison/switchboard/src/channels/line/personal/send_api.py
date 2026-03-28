@@ -35,8 +35,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from gw_client import CDP_URL, find_ext_page, get_access_token, compute_hmac, call_api
 from encrypt_e2ee import encrypt_message, _SANDBOX_JS
 
-_PATH_SEND = "/api/talk/thrift/Talk/TalkService/sendMessage"
-_PATH_KEYS = "/api/talk/thrift/Talk/TalkService/getLastE2EEPublicKeys"
+_PATH_SEND      = "/api/talk/thrift/Talk/TalkService/sendMessage"
+_PATH_NEGOTIATE = "/api/talk/thrift/Talk/TalkService/negotiateE2EEPublicKey"
 
 # LINE E2EE server 錯誤碼
 _E2EE_RETRY_ENCRYPT      = 82  # channel cache 過期 → 重取 key 重試
@@ -71,17 +71,17 @@ async def get_my_info(page) -> tuple[str, int]:
 # ── 2. 取得對方公鑰 ───────────────────────────────────────────────
 
 async def get_recipient_key(page, token: str, recipient_mid: str) -> tuple[int, str]:
-    """呼叫 getLastE2EEPublicKeys，回傳 (keyId, pubKeyB64)。"""
-    body_obj = [[recipient_mid]]
+    """呼叫 negotiateE2EEPublicKey，回傳 (keyId, pubKeyB64)。"""
+    body_obj = [recipient_mid]
     body_str = json.dumps(body_obj)
-    hmac = await compute_hmac(page, token, _PATH_KEYS, body_str)
-    result = call_api(_PATH_KEYS, body_obj, token, hmac)
+    hmac = await compute_hmac(page, token, _PATH_NEGOTIATE, body_str)
+    result = call_api(_PATH_NEGOTIATE, body_obj, token, hmac)
     if result.get('code') != 0:
-        raise RuntimeError(f"getLastE2EEPublicKeys 失敗: {result}")
-    key_info = result.get('data', {}).get(recipient_mid)
-    if not key_info:
+        raise RuntimeError(f"negotiateE2EEPublicKey 失敗: {result}")
+    pub_key = result.get('data', {}).get('publicKey')
+    if not pub_key:
         raise RuntimeError(f"找不到 {recipient_mid[:20]} 的公鑰（可能未啟用 E2EE）")
-    return key_info['keyId'], key_info['keyData']
+    return pub_key['keyId'], pub_key['keyData']
 
 
 # ── 3. 單次 encrypt + sendMessage（key 可注入）───────────────────

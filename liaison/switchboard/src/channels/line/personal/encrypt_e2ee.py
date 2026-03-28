@@ -105,7 +105,7 @@ _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((reso
     iframe.contentWindow.postMessage({sandboxId, type: "request",
         data: {command: "e2eechannel_encrypt_v2", ltsmKeyId: chId,
                payload: {to, from: frm, senderKeyId: sKId, receiverKeyId: rKId,
-                         contentType: 0, sequenceNumber: seqN, plaintext: ptBytes}}}, "*");
+                         contentType: 0, sequenceNumber: BigInt(seqN), plaintext: ptBytes}}}, "*");
     setTimeout(() => resolve({error: "timeout"}), 8000);
 })"""
 
