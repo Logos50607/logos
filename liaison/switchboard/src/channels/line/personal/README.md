@@ -126,10 +126,28 @@ uv run fetch_messages.py --output /tmp/msgs.json
 
 ## 模組狀態
 
+## 發送訊息
+
+```bash
+uv run send_message.py --to <mid> --text "訊息內容"
+```
+
+### 運作原理
+
+1. 連接 CDP 找到 extension page
+2. 導航到 `#/chats/<mid>`，點擊聊天室項目
+3. 在 `chatroomEditor` contenteditable div 輸入文字，按 Enter
+4. Extension 自動觸發 `negotiateE2EEPublicKey` → `sendMessage`（E2EE 加密）
+5. 確認 `sendMessage` request 觸發後返回原始頁面
+
+> 注意：發送會觸發 `sendChatChecked`，目標聊天室訊息標為已讀。
+
+## 模組狀態
+
 | 功能 | 狀態 |
 |------|------|
 | 登入流程 | ✅ `run.py` |
 | Inbound capture | ✅ `capture.py` |
 | Fetch 完整訊息 | ✅ `fetch_messages.py` |
-| Outbound send | ⬜ 待建立 |
+| Outbound send | ✅ `send_message.py` |
 | Message processor | ✅ `src/processors/line_personal.py` |
