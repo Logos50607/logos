@@ -137,3 +137,6 @@ antigravity() {
 export PATH="$PATH:/home/logos/.turso"
 
 . "$HOME/.local/bin/env"
+
+# LINE Official Account - 允許讀寫的聊天室白名單（逗號分隔）
+export LINE_OA_CHAT_WHITELIST="Ued0d228b5a360577ceb5f580d9cdf12f"
