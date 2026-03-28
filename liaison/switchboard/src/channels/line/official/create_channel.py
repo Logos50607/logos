@@ -107,14 +107,29 @@ async def _xsrf(ctx, url: str) -> str:
     return next((c["value"] for c in cookies if c["name"] == "XSRF-TOKEN"), "")
 
 
+async def _agree_notices(ctx, oa_id: str, xsrf: str) -> None:
+    """同意 manager.line.biz 的服務條款（notices 2 & 4）"""
+    headers = {"X-XSRF-TOKEN": xsrf, "Origin": "https://manager.line.biz"}
+    redirect = f"/account/{oa_id}/"
+    for notice_id in (2, 4):
+        url = (f"https://manager.line.biz/api/bots/{oa_id}/notices/{notice_id}/agree"
+               f"?redirectUri={redirect}")
+        r = await ctx.request.fetch(url, method="PUT", headers=headers, data="{}")
+        print(f">>> notices/{notice_id}/agree: {r.status}")
+
+
 async def enable_messaging_api(ctx, oa_id: str, provider_id: int) -> str | None:
     xsrf = await _xsrf(ctx, "https://manager.line.biz")
+    headers = {"Content-Type": "application/json",
+               "X-XSRF-TOKEN": xsrf,
+               "Origin": "https://manager.line.biz"}
+
+    # 先同意條款（新 OA 必須）
+    await _agree_notices(ctx, oa_id, xsrf)
+
     resp = await ctx.request.fetch(
         f"https://manager.line.biz/api/bots/{oa_id}/enableMessagingApi",
-        method="POST",
-        headers={"Content-Type": "application/json",
-                 "X-XSRF-TOKEN": xsrf,
-                 "Origin": "https://manager.line.biz"},
+        method="POST", headers=headers,
         data=json.dumps({"providerId": provider_id}),
     )
     text = await resp.text()
@@ -122,23 +137,56 @@ async def enable_messaging_api(ctx, oa_id: str, provider_id: int) -> str | None:
         raise RuntimeError(f"enableMessagingApi HTTP {resp.status}: {text}")
     data = json.loads(text) if text.strip() else {}
     print(f">>> enableMessagingApi: {json.dumps(data)[:200]}")
+    # 回傳可能為空；改用 channel list 查詢
     return str(data.get("channelId") or data.get("id") or "")
 
 
+async def find_channel_id(ctx, provider_id: int, oa_basic_id: str) -> str:
+    """從 provider channel list 找出對應 OA 的 channel ID"""
+    r = await ctx.request.fetch(
+        f"https://developers.line.biz/api/v1/channel/?providerId={provider_id}")
+    if not r.ok:
+        return ""
+    channels = (json.loads(await r.text())).get("values", [])
+    for ch in channels:
+        bot_cfg = ch.get("botConfiguration", {})
+        if bot_cfg.get("basicId") == oa_basic_id:
+            return str(ch["id"])
+    # fallback：回傳最新建立的 BOT channel
+    bots = [c for c in channels if "BOT" in c.get("productTypes", [])]
+    bots.sort(key=lambda c: c.get("createdAt", 0), reverse=True)
+    return str(bots[0]["id"]) if bots else ""
+
+
 async def get_channel_info(ctx, channel_id: str) -> dict:
-    xsrf = await _xsrf(ctx, "https://developers.line.biz")
     resp = await ctx.request.fetch(
         f"https://developers.line.biz/api/v1/channel/{channel_id}",
         method="GET",
-        headers={"X-XSRF-TOKEN": xsrf},
     )
     text = await resp.text()
     if not resp.ok:
         print(f">>> get_channel_info HTTP {resp.status}: {text[:200]}")
         return {}
     data = json.loads(text) if text.strip() else {}
-    print(f">>> channel info: {json.dumps(data)[:300]}")
+    print(f">>> channel secret: {data.get('secret','(not found)')}")
     return data
+
+
+def issue_access_token(channel_id: str, secret: str) -> str:
+    """用 channel_id + secret 換取 long-term access token"""
+    import urllib.request, urllib.parse
+    body = urllib.parse.urlencode({
+        "grant_type":    "client_credentials",
+        "client_id":     channel_id,
+        "client_secret": secret,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.line.me/v2/oauth/accessToken",
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read()).get("access_token", "")
 
 
 async def set_webhook(ctx, oa_id: str, webhook_url: str) -> None:
@@ -201,10 +249,15 @@ async def run(args) -> None:
         print(f">>> 開啟 Messaging API（provider: {args.provider_id}）")
         channel_id = await enable_messaging_api(ctx, oa_id, int(args.provider_id))
 
+        # enableMessagingApi 回傳空時，從 channel list 找 ID
+        if not channel_id:
+            print(f">>> 從 channel list 搜尋（oa: {oa_id}）")
+            channel_id = await find_channel_id(ctx, int(args.provider_id), oa_id)
+            print(f">>> channel ID：{channel_id}")
+
         # 3. 取 Channel Secret & Token
         ch_info = {}
         if channel_id:
-            print(f">>> 取 Channel 資訊（channel: {channel_id}）")
             ch_info = await get_channel_info(ctx, channel_id)
 
         # 4. Webhook
@@ -212,15 +265,18 @@ async def run(args) -> None:
             await set_webhook(ctx, oa_id, args.webhook_url)
 
         # 5. 儲存憑證
-        secret = ch_info.get("channelSecret") or ch_info.get("secret") or ""
-        token  = (ch_info.get("channelAccessToken") or
-                  ch_info.get("accessToken") or "")
+        secret = ch_info.get("secret") or ch_info.get("channelSecret") or ""
+        # access token 需另外用 OAuth API 發行
+        token = ""
+        if secret and channel_id:
+            print(">>> 發行 Channel Access Token...")
+            token = issue_access_token(channel_id, secret)
         if secret and token:
             creds_module.save(secret, token)
             print(">>> 憑證已儲存")
             creds_module.show()
         else:
-            print(f">>> channel info 尚不完整：{json.dumps(ch_info)[:400]}")
+            print(f">>> 憑證尚未取得 secret={secret!r} token={token!r}")
 
         await browser.close()
         print("\n>>> 完成！")
