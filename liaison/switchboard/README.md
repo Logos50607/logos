@@ -70,6 +70,7 @@ python3 src/processors/line_personal.py --input src/channels/line/personal/captu
 |------|------|
 | LINE 個人 inbound（CDP capture） | ✅ |
 | LINE 個人 outbound（CDP send） | ⬜ |
+| LINE 官方 設定精靈（setup wizard） | ✅ `src/channels/line/official/setup.py` |
 | LINE 官方 inbound（webhook） | ⬜ |
 | LINE 官方 outbound（push/reply） | ⬜ |
 | Processors（訊息解析） | ✅ LINE personal（`src/processors/line_personal.py`）|
