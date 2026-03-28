@@ -75,12 +75,35 @@ async def send_text(page, to: str, text: str) -> dict:
         await page.evaluate("window.location.hash = '#/chats'")
         await asyncio.sleep(1)
 
-        # 點擊目標聊天室
         sel = CHATITEM_SEL.format(to=to)
+
+        # 嘗試1：直接點擊（已在畫面內）
         try:
-            await page.click(sel, timeout=5000)
-        except Exception as e:
-            return {'error': f"找不到聊天室 {to[:20]}：{e}"}
+            await page.click(sel, timeout=2000)
+        except Exception:
+            # 嘗試2：滾動聊天清單直到找到 data-mid 元素
+            list_sel = "ul[class*='chatlist'], div[class*='chatList'], div[class*='chat_list']"
+            scrolled = await page.evaluate(f'''(async (to) => {{
+                const sel = `[data-mid="${{to}}"]`;
+                const lists = document.querySelectorAll("ul, div[class*=chatlist], div[class*=chat_list]");
+                // 滾動有 overflow 的容器
+                for (const el of document.querySelectorAll("*")) {{
+                    const s = window.getComputedStyle(el);
+                    if ((s.overflowY === "auto" || s.overflowY === "scroll") && el.scrollHeight > el.clientHeight) {{
+                        for (let i = 0; i < 30; i++) {{
+                            if (document.querySelector(sel)) return true;
+                            el.scrollBy(0, 200);
+                            await new Promise(r => setTimeout(r, 150));
+                        }}
+                    }}
+                }}
+                return !!document.querySelector(sel);
+            }})''', to)
+
+            try:
+                await page.click(sel, timeout=3000)
+            except Exception as e:
+                return {'error': f"找不到聊天室 {to[:20]}：{e}"}
 
         await asyncio.sleep(1.5)
 
