@@ -21,6 +21,12 @@ description: "LINE 個人帳號 channel：CDP tap on LINE Chrome extension，rea
 | `qr.py` | QR code 擷取、顯示、登入狀態監聽 |
 | `capture.py` | 攔截 service worker 訊息並錄製 |
 | `diagnose.py` | 診斷工具（頁面狀態、網路攔截） |
+| `gw_client.py` | GW API 共用工具（token、HMAC、call_api） |
+| `open_chat.py` | UI 模擬：導航並開啟指定聊天室 |
+| `send_message.py` | UI 模擬：發送文字訊息（觸發已讀） |
+| `encrypt_e2ee.py` | E2EE V2 加密（純 postMessage，不觸發 UI） |
+| `send_api.py` | API 直送：E2EE 加密 + GW API（不觸發已讀）|
+| `fetch_messages.py` | 抓取完整訊息歷史 |
 
 ## 登入流程
 
@@ -128,19 +134,47 @@ uv run fetch_messages.py --output /tmp/msgs.json
 
 ## 發送訊息
 
+### UI 模擬方式（觸發已讀）
+
 ```bash
 uv run send_message.py --to <mid> --text "訊息內容"
 ```
 
-### 運作原理
-
 1. 連接 CDP 找到 extension page
-2. 導航到 `#/chats/<mid>`，點擊聊天室項目
-3. 在 `chatroomEditor` contenteditable div 輸入文字，按 Enter
-4. Extension 自動觸發 `negotiateE2EEPublicKey` → `sendMessage`（E2EE 加密）
-5. 確認 `sendMessage` request 觸發後返回原始頁面
+2. 導航到 `#/chats`，滾動虛擬列表找到目標聊天室並點擊
+3. 在 `chatroomEditor` div 輸入文字，按 Enter
+4. Extension 自動完成 E2EE 加密 → `sendMessage`
+5. 確認 GW request 觸發後返回原始頁面
 
-> 注意：發送會觸發 `sendChatChecked`，目標聊天室訊息標為已讀。
+> 注意：UI 模擬會觸發 `sendChatChecked`，目標聊天室標為已讀。
+
+### API 直送方式（不觸發 UI 與已讀）
+
+```bash
+uv run send_api.py --to <mid> --text "訊息內容"
+```
+
+1. reload page → 取得 `X-Line-Access` token
+2. 從 `localStorage` 解密取得私鑰（`lcs_secure_<mid>`）
+3. `getLastE2EEPublicKeys` 取對方最新公鑰
+4. `encrypt_e2ee.py` 透過 ltsmSandbox postMessage 完成 ECDH + AES 加密
+5. 直接呼叫 `sendMessage` GW API
+
+> 僅支援 1-on-1 聊天室（E2EE V2）。群組待實作。
+
+### E2EE 技術說明
+
+LINE E2EE V2 使用 Curve25519 ECDH + AES 加密，全部在 `ltsm.wasm` 內執行，
+透過 `ltsmSandbox` iframe 的 postMessage 介面對外暴露：
+
+| 指令 | 說明 |
+|------|------|
+| `decrypt_with_storage_key` | 解密 localStorage 中的私鑰 |
+| `e2eekey_load_key(keyBytes)` | 載入私鑰到 wasm → 回傳 keyLtsmId |
+| `e2eekey_create_channel(keyId, pubKeyBytes)` | ECDH 建立 channel → 回傳 channelLtsmId |
+| `e2eechannel_encrypt_v2(channelId, payload)` | AES 加密 → 回傳 raw bytes |
+
+chunks 格式（5 個 base64）：`[IV(16B), ciphertext, seqKeyId(12B), senderKeyId(4B), receiverKeyId(4B)]`
 
 ## 模組狀態
 
@@ -149,5 +183,7 @@ uv run send_message.py --to <mid> --text "訊息內容"
 | 登入流程 | ✅ `run.py` |
 | Inbound capture | ✅ `capture.py` |
 | Fetch 完整訊息 | ✅ `fetch_messages.py` |
-| Outbound send | ✅ `send_message.py` |
+| Outbound send（UI） | ✅ `send_message.py`（觸發已讀） |
+| Outbound send（API） | ✅ `send_api.py`（1-on-1 E2EE V2） |
+| E2EE 加密模組 | ✅ `encrypt_e2ee.py` |
 | Message processor | ✅ `src/processors/line_personal.py` |
