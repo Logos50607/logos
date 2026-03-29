@@ -143,7 +143,7 @@ def _build_send_body(seq_num: int, to: str, my_mid: str,
             "FILE_SIZE": str(file_size),
             "MEDIA_CONTENT_INFO": media_info,
         },
-        "hasContent": False,
+        "hasContent": True,
         "chunks": chunks,
     }]
 
@@ -195,7 +195,7 @@ async def send_image(page, to: str, file_path: Path) -> dict:
     chunks   = await encrypt_message(page, to, my_mid,
                                      sender_key_id, receiver_key_id,
                                      receiver_pub_b64, seq_num,
-                                     plaintext)
+                                     plaintext, content_type=1)
 
     print(">>> 發送訊息...", flush=True)
     ext = file_path.suffix.lstrip('.').lower() or "jpeg"

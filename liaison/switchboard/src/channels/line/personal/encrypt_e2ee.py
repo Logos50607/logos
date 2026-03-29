@@ -109,7 +109,7 @@ _CREATE_CHANNEL_JS = """([keyId, pubB64]) => new Promise((resolve) => {
     }, 40);
 })"""
 
-_ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((resolve) => {
+_ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, ctType, seqN, pt]) => new Promise((resolve) => {
     const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
     if (!iframe) { resolve({error: "no iframe"}); return; }
     const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
@@ -140,7 +140,7 @@ _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, seqN, pt]) => new Promise((reso
         iframe.contentWindow.postMessage({sandboxId, type: "request",
             data: {command: "e2eechannel_encrypt_v2", ltsmKeyId: chId,
                    payload: {to, from: frm, senderKeyId: sKId, receiverKeyId: rKId,
-                             contentType: 0, sequenceNumber: BigInt(seqN), plaintext: ptBytes}}}, "*");
+                             contentType: ctType, sequenceNumber: BigInt(seqN), plaintext: ptBytes}}}, "*");
         setTimeout(() => resolve({error: "timeout"}), 8000);
     }, 40);
 })"""
@@ -162,7 +162,8 @@ async def encrypt_message(page,
                           to: str, from_mid: str,
                           sender_key_id: int, receiver_key_id: int,
                           receiver_pub_key_b64: str,
-                          seq_num: int, plaintext_json: str) -> list:
+                          seq_num: int, plaintext_json: str,
+                          content_type: int = 0) -> list:
     """
     E2EE V2 加密訊息，回傳 5 個 base64 chunks。
 
@@ -185,7 +186,7 @@ async def encrypt_message(page,
 
     r = await page.evaluate(_ENCRYPT_V2_JS,
                             [channel_ltsm_id, to, from_mid,
-                             sender_key_id, receiver_key_id, seq_num, plaintext_json])
+                             sender_key_id, receiver_key_id, content_type, seq_num, plaintext_json])
     if 'error' in r:
         raise RuntimeError(f"e2eechannel_encrypt_v2 失敗: {r['error']}")
     return r['ok']
