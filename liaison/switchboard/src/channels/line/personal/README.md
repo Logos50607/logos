@@ -185,5 +185,29 @@ chunks 格式（5 個 base64）：`[IV(16B), ciphertext, seqKeyId(12B), senderKe
 | Fetch 完整訊息 | ✅ `fetch_messages.py` |
 | Outbound send（UI） | ✅ `send_message.py`（觸發已讀） |
 | Outbound send（API） | ✅ `send_api.py`（1-on-1 E2EE V2） |
+| Outbound send image | ✅ `send_image.py`（E2EE V2 圖片） |
+| Download image | ✅ `download_image.py`（E2EE V2 圖片解密） |
 | E2EE 加密模組 | ✅ `encrypt_e2ee.py` |
 | Message processor | ✅ `src/processors/line_personal.py` |
+
+## 發送圖片
+
+```bash
+uv run send_image.py --to <mid> --file image.png
+```
+
+### E2EE V2 圖片協議重點
+
+1. **加密格式**：HKDF-SHA256(keyMaterial, info=`FileEncryption`) → 76B → encKey/macKey/nonce；AES-CTR + HMAC-SHA256 尾附
+2. **OBS 上傳**：`POST obs.line-apps.com/r/talk/emi/{reqid}`（X-Obs-Params type=`"file"`，非 `"image"`）
+3. **Preview 必傳**：主圖上傳後必須再 POST 同加密資料至 `{oid}__ud-preview`，mobile app 才能顯示縮圖並允許點擊
+4. **MEDIA_CONTENT_INFO**：需含 `width`/`height`；`FILE_SIZE` 為**原始**（非加密後）大小
+5. **MEDIA_THUMB_INFO**：`{"width": W, "height": H}`，與主圖尺寸相同即可
+6. **E2EE chunks**：`encrypt_message(..., content_type=1)` — contentType 必須為 1，否則接收方 AAD 不匹配解密失敗
+
+### 下載驗證
+
+```bash
+uv run fetch_messages.py --chat <mid> --count 5
+uv run download_image.py --msg-id <id> --out /tmp/out.png
+```
