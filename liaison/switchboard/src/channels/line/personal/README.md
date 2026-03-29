@@ -187,6 +187,7 @@ chunks 格式（5 個 base64）：`[IV(16B), ciphertext, seqKeyId(12B), senderKe
 | Outbound send（API） | ✅ `send_api.py`（1-on-1 E2EE V2） |
 | Outbound send image | ✅ `send_image.py`（E2EE V2 圖片） |
 | Outbound send video | ✅ `send_video.py`（E2EE V2 影片） |
+| Outbound send file  | ✅ `send_file.py`（E2EE V2 任意檔案） |
 | Download image | ✅ `download_image.py`（E2EE V2 圖片解密） |
 | E2EE 加密模組 | ✅ `encrypt_e2ee.py` |
 | Message processor | ✅ `src/processors/line_personal.py` |
