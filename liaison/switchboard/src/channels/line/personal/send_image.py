@@ -32,6 +32,7 @@ import hashlib
 import hmac as hmac_lib
 import json
 import os
+import struct
 import sys
 import time
 import uuid
@@ -62,6 +63,27 @@ def _generate_km() -> tuple[str, bytes]:
     return base64.b64encode(km).decode(), km
 
 
+def _get_image_size(data: bytes, extension: str) -> tuple[int, int]:
+    """從圖片原始 bytes 取得 (width, height)，失敗回傳 (0, 0)。"""
+    try:
+        if extension == 'png' and data[:8] == b'\x89PNG\r\n\x1a\n':
+            return struct.unpack('>II', data[16:24])
+        if extension in ('jpg', 'jpeg'):
+            i = 2
+            while i + 4 < len(data):
+                if data[i] != 0xFF:
+                    break
+                marker = data[i + 1]
+                if marker in (0xC0, 0xC1, 0xC2):
+                    h, w = struct.unpack('>HH', data[i + 5:i + 9])
+                    return w, h
+                seg_len = struct.unpack('>H', data[i + 2:i + 4])[0]
+                i += 2 + seg_len
+    except Exception:
+        pass
+    return 0, 0
+
+
 # ── 2. 加密圖片 ───────────────────────────────────────────────────
 
 def _encrypt_image(data: bytes, km_b64: str) -> bytes:
@@ -82,21 +104,17 @@ def _encrypt_image(data: bytes, km_b64: str) -> bytes:
 
 # ── 3. 上傳至 OBS ────────────────────────────────────────────────
 
-def _obs_upload(obs_token: str, enc_data: bytes,
-                filename: str, file_size: int) -> str:
+def _obs_post(obs_token: str, enc_data: bytes, path: str,
+              filename: str) -> str:
     """
-    POST 加密圖片至 OBS，回傳伺服器分配的 OID（x-obs-oid 標頭）。
+    POST 加密資料至 OBS 指定路徑，回傳 x-obs-oid 標頭（可能為空）。
     """
-    reqid = f"reqid-{uuid.uuid4()}"
-    url   = f"{_OBS_BASE}/r/talk/emi/{reqid}"
-
-    # E2EE V2: type="file" (not "image"), no cat field
+    import http.client, ssl
     obs_params = base64.urlsafe_b64encode(
         json.dumps({"ver": "2.0", "name": filename, "type": "file"}).encode()
     ).rstrip(b'=').decode()
 
-    import http.client, ssl
-    parsed = urllib.parse.urlparse(url)
+    parsed = urllib.parse.urlparse(_OBS_BASE + path)
     ctx = ssl.create_default_context()
     conn = http.client.HTTPSConnection(parsed.netloc, context=ctx, timeout=60)
     try:
@@ -111,38 +129,63 @@ def _obs_upload(obs_token: str, enc_data: bytes,
                           '(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
         })
         resp = conn.getresponse()
+        resp.read()
         if resp.status not in (200, 201):
-            body = resp.read(500).decode(errors='replace')
-            raise RuntimeError(f"OBS 上傳失敗 HTTP {resp.status}: {body}")
-        oid = resp.getheader('x-obs-oid')
-        if not oid:
-            raise RuntimeError("OBS 上傳回應沒有 x-obs-oid 標頭")
-        return oid
+            raise RuntimeError(f"OBS 上傳失敗 HTTP {resp.status}: {path}")
+        return resp.getheader('x-obs-oid', '')
     finally:
         conn.close()
+
+
+def _obs_upload(obs_token: str, enc_data: bytes,
+                filename: str, file_size: int) -> str:
+    """
+    POST 加密圖片至 OBS，回傳伺服器分配的 OID（x-obs-oid 標頭）。
+    上傳完成後自動補傳 ud-preview（同資料），讓 mobile client 可以顯示。
+    """
+    reqid = f"reqid-{uuid.uuid4()}"
+    oid = _obs_post(obs_token, enc_data, f"/r/talk/emi/{reqid}", filename)
+    if not oid:
+        raise RuntimeError("OBS 上傳回應沒有 x-obs-oid 標頭")
+
+    # 上傳 preview（mobile app 需要此才能顯示縮圖並允許點擊）
+    try:
+        _obs_post(obs_token, enc_data, f"/r/talk/emi/{oid}__ud-preview", filename)
+        print("    preview 上傳完成", flush=True)
+    except Exception as e:
+        print(f"    preview 上傳失敗（忽略）: {e}", flush=True)
+
+    return oid
 
 
 # ── 4. 組 sendMessage body ────────────────────────────────────────
 
 def _build_send_body(seq_num: int, to: str, my_mid: str,
                      oid: str, file_size: int, chunks: list,
-                     extension: str = "jpeg") -> list:
+                     extension: str = "jpeg",
+                     width: int = 0, height: int = 0) -> list:
     """組 sendMessage API body（contentType=1 圖片）。"""
-    media_info = json.dumps({
+    meta = {
         "onObs": True, "category": "original",
         "animated": False, "extension": extension,
         "fileSize": file_size,
-    })
+    }
+    if width and height:
+        meta["width"] = width
+        meta["height"] = height
+    content_meta = {
+        "e2eeVersion": "2",
+        "SID": "emi",
+        "OID": oid,
+        "FILE_SIZE": str(file_size),
+        "MEDIA_CONTENT_INFO": json.dumps(meta),
+    }
+    if width and height:
+        content_meta["MEDIA_THUMB_INFO"] = json.dumps({"width": width, "height": height})
     return [seq_num, {
         "from": my_mid, "to": to, "toType": 0,
         "id": f"local-{seq_num}", "contentType": 1,
-        "contentMetadata": {
-            "e2eeVersion": "2",
-            "SID": "emi",
-            "OID": oid,
-            "FILE_SIZE": str(file_size),
-            "MEDIA_CONTENT_INFO": media_info,
-        },
+        "contentMetadata": content_meta,
         "hasContent": True,
         "chunks": chunks,
     }]
@@ -199,7 +242,9 @@ async def send_image(page, to: str, file_path: Path) -> dict:
 
     print(">>> 發送訊息...", flush=True)
     ext = file_path.suffix.lstrip('.').lower() or "jpeg"
-    body_obj = _build_send_body(seq_num, to, my_mid, oid, file_size, chunks, ext)
+    w, h = _get_image_size(img_data, ext)
+    print(f"    尺寸: {w}x{h}", flush=True)
+    body_obj = _build_send_body(seq_num, to, my_mid, oid, file_size, chunks, ext, w, h)
     body_str = json.dumps(body_obj)
     hmac_val = await compute_hmac(page, token, _PATH_SEND, body_str)
     result   = call_api(_PATH_SEND, body_obj, token, hmac_val)
