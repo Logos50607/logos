@@ -186,6 +186,7 @@ chunks 格式（5 個 base64）：`[IV(16B), ciphertext, seqKeyId(12B), senderKe
 | Outbound send（UI） | ✅ `send_message.py`（觸發已讀） |
 | Outbound send（API） | ✅ `send_api.py`（1-on-1 E2EE V2） |
 | Outbound send image | ✅ `send_image.py`（E2EE V2 圖片） |
+| Outbound send video | ✅ `send_video.py`（E2EE V2 影片） |
 | Download image | ✅ `download_image.py`（E2EE V2 圖片解密） |
 | E2EE 加密模組 | ✅ `encrypt_e2ee.py` |
 | Message processor | ✅ `src/processors/line_personal.py` |
@@ -211,3 +212,18 @@ uv run send_image.py --to <mid> --file image.png
 uv run fetch_messages.py --chat <mid> --count 5
 uv run download_image.py --msg-id <id> --out /tmp/out.png
 ```
+
+## 發送影片
+
+```bash
+uv run send_video.py --to <mid> --file video.mp4
+```
+
+### E2EE V2 影片協議重點
+
+1. **contentType**：`2`（EU.VIDEO）
+2. **SID**：`emv`（OBS 路徑 `/r/talk/emv/`）
+3. **contentMetadata**：`DURATION`（毫秒字串）、`FILE_SIZE`、`SID`、`OID`、`e2eeVersion:"2"`；可選 `MEDIA_THUMB_INFO`
+4. **無 MEDIA_CONTENT_INFO**：影片不需要，與圖片不同
+5. **Preview**：縮圖 JPEG（第一幀）加密後上傳至 `{oid}__ud-preview`，讓 mobile 顯示縮圖
+6. **依賴**：`av`（PyAV）— 擷取影片第一幀作縮圖；若未安裝則無縮圖但仍可發送
