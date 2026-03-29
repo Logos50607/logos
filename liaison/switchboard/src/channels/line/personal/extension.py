@@ -9,7 +9,8 @@ extension.py - LINE Chrome extension 下載、解壓、key 注入與 ID 計算
 import base64, hashlib, io, json, struct, urllib.request, zipfile
 from pathlib import Path
 
-_STORE_ID = "ophjlpahpchlmihnnnihgmmeilfjmjjc"
+_STORE_ID      = "ophjlpahpchlmihnnnihgmmeilfjmjjc"
+_PINNED_VERSION = "3.7.2"   # 逆向分析基準版本；升版前須重新驗證協議
 _CRX_URL  = (
     "https://clients2.google.com/service/update2/crx"
     "?response=redirect&prodversion=130.0&acceptformat=crx3"
@@ -25,6 +26,7 @@ def ensure_ready(ext_dir: Path) -> None:
     crx = urllib.request.urlopen(_CRX_URL).read()
     _unpack(crx, ext_dir)
     _inject_key(crx, ext_dir)
+    _check_version(ext_dir)
     print(f">>> Extension 就緒，ID: {get_id(ext_dir)}")
 
 
@@ -38,6 +40,20 @@ def get_id(ext_dir: Path) -> str:
 
 
 # ── 私有 ──────────────────────────────────────────────────────────
+
+def _check_version(ext_dir: Path) -> None:
+    """比對下載版本與逆向分析基準版本，不符時印警告。"""
+    try:
+        m = json.loads((ext_dir / "manifest.json").read_text())
+        ver = m.get("version", "?")
+        if ver != _PINNED_VERSION:
+            print(f"⚠️  警告：下載版本 {ver} 與鎖定版本 {_PINNED_VERSION} 不符。")
+            print("   媒體加密協議（chunked HMAC、ud-hash、SID mapping 等）可能已變動，")
+            print("   請重新對 ext/static/js/main.js 驗證後再使用。")
+        else:
+            print(f">>> 版本確認：{ver}（符合鎖定版本）")
+    except Exception:
+        pass
 
 def _id_from_key(key: bytes) -> str:
     h = hashlib.sha256(key).hexdigest()[:32]
