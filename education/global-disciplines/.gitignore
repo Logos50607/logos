@@ -15,3 +15,6 @@ state.json
 # Backup files
 *.orig
 antigravity/
+
+# Runtime state
+.session-scan-state
