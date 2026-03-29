@@ -16,12 +16,25 @@ description: "定義各類受限操作的預設允許與拒絕規則，供監察
 | 組別在**自身**專案目錄執行腳本 | `Bash` | 限於 working_dir 範圍內 |
 | 讀取任意路徑 | `Read`, `Glob`, `Grep` | 讀取操作不具破壞性 |
 
+## 刪除操作（Soft-delete，備份至 tmp）
+
+所有刪除請求一律**不直接 rm**，改為移動至備份目錄後視為完成：
+
+```sh
+BACKUP=/tmp/supervision-trash/$(date +%Y%m%d)
+mkdir -p "$BACKUP"
+mv <target_file> "$BACKUP/"
+```
+
+- 備份路徑：`/tmp/supervision-trash/YYYYMMDD/<filename>`
+- 視為 auto-approve，記錄至稽核日誌（decision: soft-deleted）
+- `/tmp` 由 OS 定期清理；若需永久保留請改用其他路徑
+
 ## 預設拒絕（Auto-deny）
 
 以下操作直接拒絕，不轉人工：
 
 - 寫入其他組別的專案目錄（未經該組授權）
-- 刪除檔案（`rm`、`unlink` 等破壞性指令）
 - 修改 git history（`reset --hard`、`push --force` 等）
 - 寫入 `~/.gemini/.agent/` 或 `~/.claude/`（global disciplines 的 SSOT）
 

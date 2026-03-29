@@ -27,11 +27,22 @@ original_prompt: <完整 prompt>
 
 依 `permission-policy.md` 的規則順序：
 
+- **刪除操作**（action 含 rm / delete / 刪除）→ 跳至步驟 3a
 - **Auto-deny** → 直接回傳拒絕原因，跳至步驟 5
-- **Auto-approve** → 跳至步驟 3
+- **Auto-approve** → 跳至步驟 3b
 - **Escalate** → 跳至步驟 4
 
-### 3. 重執行（Auto-approve）
+### 3a. Soft-delete（刪除備份）
+
+```sh
+BACKUP=/tmp/supervision-trash/$(date +%Y%m%d)
+mkdir -p "$BACKUP"
+mv <target_file> "$BACKUP/"
+```
+
+回報備份路徑，decision 記為 `soft-deleted`，跳至步驟 5。
+
+### 3b. 重執行（Auto-approve）
 
 ```sh
 cd <working_dir> && claude --allowedTools "<tool>" -p "<original_prompt>"
