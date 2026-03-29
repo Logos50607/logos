@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["playwright", "cryptography", "av"]
+# dependencies = ["playwright", "cryptography", "av", "Pillow"]
 # ///
 """
 send_video.py - 透過 LINE GW API（E2EE V2）發送影片訊息
@@ -70,19 +70,44 @@ def _generate_km() -> tuple[str, bytes]:
 
 # ── 2. 加密資料 ───────────────────────────────────────────────────
 
-def _encrypt_data(data: bytes, km_b64: str) -> bytes:
-    """HKDF 衍生金鑰，AES-CTR 加密，附加 HMAC-SHA256。"""
+_CHUNK_SIZE = 131072  # 128 KB — extension JS 的 SL() 分塊大小
+
+
+def _derive_keys(km_b64: str) -> tuple[bytes, bytes, bytes]:
     km = base64.b64decode(km_b64)
     hkdf = HKDF(algorithm=hashes.SHA256(), length=76, salt=b'', info=b'FileEncryption')
     derived = hkdf.derive(km)
-    enc_key, mac_key, nonce = derived[0:32], derived[32:64], derived[64:76]
+    return derived[0:32], derived[32:64], derived[64:76]  # enc_key, mac_key, nonce
+
+
+def _encrypt_data(data: bytes, km_b64: str, chunked_hmac: bool = False) -> bytes:
+    """
+    HKDF 衍生金鑰，AES-CTR 加密，附加 HMAC-SHA256。
+
+    chunked_hmac=True（影片）：
+        HMAC 的輸入 = concat(SHA-256(每個 128KB ciphertext chunk))
+        符合 extension JS CL(file, km, BP(t)) 的 chunked 模式
+
+    chunked_hmac=False（圖片/縮圖）：
+        HMAC 的輸入 = 全段 ciphertext（原本的做法）
+    """
+    enc_key, mac_key, nonce = _derive_keys(km_b64)
 
     counter = bytes(nonce) + b'\x00\x00\x00\x00'
     cipher = Cipher(algorithms.AES(enc_key), modes.CTR(counter))
     enc = cipher.encryptor()
     ciphertext = enc.update(data) + enc.finalize()
 
-    mac = hmac_lib.new(mac_key, ciphertext, hashlib.sha256).digest()
+    if chunked_hmac:
+        # SL(): SHA-256 每個 128KB chunk → qI(): concat → TL(): HMAC
+        chunk_hashes = b''.join(
+            hashlib.sha256(ciphertext[i:i + _CHUNK_SIZE]).digest()
+            for i in range(0, len(ciphertext), _CHUNK_SIZE)
+        )
+        mac = hmac_lib.new(mac_key, chunk_hashes, hashlib.sha256).digest()
+    else:
+        mac = hmac_lib.new(mac_key, ciphertext, hashlib.sha256).digest()
+
     return ciphertext + mac
 
 
@@ -153,18 +178,30 @@ def _obs_post(obs_token: str, enc_data: bytes, path: str,
 
 # ── 5. 上傳影片至 OBS ─────────────────────────────────────────────
 
+def _compute_chunk_hashes(ciphertext: bytes) -> bytes:
+    """
+    計算 ciphertext 的 chunk hash list（raw bytes）。
+    與 _encrypt_data chunked_hmac 模式相同的分塊邏輯：
+    SHA-256(每個 128KB chunk) → 全部串接 = ud-hash 上傳內容。
+    """
+    return b''.join(
+        hashlib.sha256(ciphertext[i:i + _CHUNK_SIZE]).digest()
+        for i in range(0, len(ciphertext), _CHUNK_SIZE)
+    )
+
+
 def _obs_upload_video(obs_token: str, enc_video: bytes, filename: str,
                       enc_thumb: bytes | None) -> str:
     """
     POST 加密影片至 OBS /r/talk/emv/，回傳 OID。
-    若有縮圖，以加密縮圖上傳至 {oid}__ud-preview（讓 mobile 顯示）。
+    依序上傳：主體 → ud-preview（縮圖）→ ud-hash（chunk hashes，inline player 需要）
     """
     reqid = f"reqid-{uuid.uuid4()}"
     oid = _obs_post(obs_token, enc_video, f"/r/talk/emv/{reqid}", filename)
     if not oid:
         raise RuntimeError("OBS 上傳回應沒有 x-obs-oid 標頭")
 
-    # 上傳 preview（縮圖或影片本體）
+    # ud-preview（縮圖或影片本體）
     preview_data = enc_thumb if enc_thumb is not None else enc_video
     preview_name = Path(filename).stem + "_thumb.jpg" if enc_thumb else filename
     try:
@@ -173,6 +210,16 @@ def _obs_upload_video(obs_token: str, enc_video: bytes, filename: str,
         print("    preview 上傳完成", flush=True)
     except Exception as e:
         print(f"    preview 上傳失敗（忽略）: {e}", flush=True)
+
+    # ud-hash（chunk hash list，LINE inline player 驗證分段完整性用）
+    chunk_hashes = _compute_chunk_hashes(enc_video[:-32])  # 去掉尾端的 HMAC
+    try:
+        _obs_post(obs_token, chunk_hashes, f"/r/talk/emv/{oid}__ud-hash",
+                  "chunk-hash")
+        print(f"    ud-hash 上傳完成（{len(chunk_hashes)} bytes，"
+              f"{len(chunk_hashes)//32} chunks）", flush=True)
+    except Exception as e:
+        print(f"    ud-hash 上傳失敗（忽略）: {e}", flush=True)
 
     return oid
 
@@ -239,14 +286,14 @@ async def send_video(page, to: str, file_path: Path) -> dict:
     print(">>> 生成 keyMaterial...", flush=True)
     km_b64, _ = _generate_km()
 
-    print(">>> 加密影片...", flush=True)
-    enc_video = _encrypt_data(video_data, km_b64)
+    print(">>> 加密影片（chunked HMAC）...", flush=True)
+    enc_video = _encrypt_data(video_data, km_b64, chunked_hmac=True)
     print(f"    明文 {file_size} bytes → 加密後 {len(enc_video)} bytes", flush=True)
 
     enc_thumb: bytes | None = None
     if thumb_jpeg:
-        print(">>> 加密縮圖...", flush=True)
-        enc_thumb = _encrypt_data(thumb_jpeg, km_b64)
+        print(">>> 加密縮圖（single HMAC）...", flush=True)
+        enc_thumb = _encrypt_data(thumb_jpeg, km_b64, chunked_hmac=False)
         print(f"    縮圖 {len(thumb_jpeg)} bytes → 加密後 {len(enc_thumb)} bytes",
               flush=True)
 
