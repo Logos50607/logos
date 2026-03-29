@@ -3,6 +3,7 @@
 ## 跨組基礎建設
 
 - [ ] 2026-03-29 通訊組：起 `call-agent` 專案——封裝 `claude -p`，支援 caller 追溯（human / agent:<team> / cron:<job>）、目標組 disciplines + AGENT_PLAN 自動注入、可選額外 context 注入、call log 寫入；已有 global skill `claude-cli-subprocess` 作為技術基礎
+- [ ] 2026-03-29 通訊組 `call-agent` 就位後：補建 global rule `cross-team-claude-p`（封裝介面、注入規則、日誌路徑慣例），trigger 為 model_decision；暫緩原因：設計細節（日誌格式、注入優先順序）需 call-agent 實作完才能確定（session: ~/.claude/projects/-data-logos-strategy-team-building/81943f8b-8651-4f5b-b5b8-81c0caa52c3f.jsonl）
 - [ ] 2026-03-29 ~~聯絡組：規劃以 `claude -p` 做組間內部聯繫的核心機制~~ → 職責更正：agent 間通訊屬通訊組，聯絡組專責 agent ↔ 人類橋接
 
 - [ ] 2026-03-28 教育組：建立「組織情境快照」定期產出機制——收集各組 git log、任務完成、重要決定，摘要成結構化 markdown，供各 bot / agent 啟動時注入為長期記憶（替代 hardcode 人設與知識）
