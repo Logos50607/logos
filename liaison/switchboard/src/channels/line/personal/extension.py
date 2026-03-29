@@ -6,12 +6,12 @@ extension.py - LINE Chrome extension 下載、解壓、key 注入與 ID 計算
   get_id(ext_dir)        從 manifest.json key 計算 extension ID
 """
 
-import base64, hashlib, io, json, struct, urllib.request, zipfile
+import base64, hashlib, io, json, struct, tarfile, urllib.request, zipfile
 from pathlib import Path
 
-_STORE_ID      = "ophjlpahpchlmihnnnihgmmeilfjmjjc"
+_STORE_ID       = "ophjlpahpchlmihnnnihgmmeilfjmjjc"
 _PINNED_VERSION = "3.7.2"   # 逆向分析基準版本；升版前須重新驗證協議
-_CRX_URL  = (
+_CRX_URL = (
     "https://clients2.google.com/service/update2/crx"
     "?response=redirect&prodversion=130.0&acceptformat=crx3"
     f"&x=id%3D{_STORE_ID}%26uc"
@@ -22,7 +22,18 @@ def ensure_ready(ext_dir: Path) -> None:
     if ext_dir.exists() and (ext_dir / "manifest.json").exists():
         if _key_is_injected(ext_dir):
             return
-    print(">>> 下載 LINE extension...")
+
+    # 優先從本地備份還原（版本鎖定）
+    backup = ext_dir.parent / f"ext-{_PINNED_VERSION}.tar.gz"
+    if backup.exists():
+        print(f">>> 從本地備份還原 extension {_PINNED_VERSION}...")
+        with tarfile.open(backup, "r:gz") as t:
+            t.extractall(ext_dir.parent)
+        print(f">>> Extension 就緒（本地備份），ID: {get_id(ext_dir)}")
+        return
+
+    # fallback：從 Chrome Web Store 下載最新版
+    print(">>> 本地備份不存在，從 Chrome Web Store 下載...")
     crx = urllib.request.urlopen(_CRX_URL).read()
     _unpack(crx, ext_dir)
     _inject_key(crx, ext_dir)
