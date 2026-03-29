@@ -43,6 +43,66 @@ description: "AI 行為與維護規範，包含重複指令限制與規則、技
   `ASK_HUMAN.md` 紀錄）。
 <!-- END_FILE: agent_behavior.md -->
 
+<!-- START_FILE: agent_plan_update_triggers.md (MD5: 93a9c61ab0aa70ea85ec44fa45efdc51) -->
+---
+name: agent_plan_update_triggers
+trigger: always_on
+description: "規範 AGENT_PLAN.md 何時必須更新，確保設計決策與完成進度即時反映。"
+---
+
+# AGENT_PLAN 更新觸發規範
+
+## 取得當前 Session 路徑
+
+任何需要標注來源的更新，先執行以下指令取得當前 session 路徑：
+
+```bash
+project_dir=$(pwd | tr '/' '-' | sed 's/^-//')
+latest_session=$(ls -t ~/.claude/projects/${project_dir}/*.jsonl 2>/dev/null | head -1)
+echo "session: $latest_session"
+```
+
+跨多個 session 時，列出範圍：
+
+```bash
+ls -t ~/.claude/projects/${project_dir}/*.jsonl
+# 從輸出中取 uuid，oldest → newest
+```
+
+## 必須更新的時機
+
+### 1. 設計方向改變
+當對話中確立了新的設計方向（推翻或修正既有做法），必須：
+- 在 AGENT_PLAN.md 新增或更正對應項目
+- 加註來源 session
+
+格式：
+```
+- [ ] <YYYY-MM-DD> <描述>
+      （session: <latest_session 輸出值>）
+```
+
+跨多個 session：
+```
+- [ ] <YYYY-MM-DD> <描述>
+      （sessions: <uuid-oldest> → <uuid-newest>, project: <project_dir>）
+```
+
+### 2. 任務完成
+將項目標記 `[x]` 時，必須補上執行細節與驗證方式：
+
+```
+- [x] <YYYY-MM-DD> <描述>
+      執行：<實際做了什麼>
+      驗證：<如何確認已生效>
+      session: <latest_session 輸出值>
+```
+
+## 格式
+
+遵循 `todolist_format.md`：條列表、最新日期優先、日期格式 `YYYY-MM-DD`。
+<!-- END_FILE: agent_plan_update_triggers.md -->
+
 <!-- START_FILE: development_guidelines.md (MD5: 6884ea3a8688120930d43666cd8bc649) -->
 ---
 name: development_guidelines
@@ -315,6 +375,78 @@ description: "如何從本專案呼叫 <group>/<module>"
 
 這樣在排程之外（測試、手動觸發、其他 agent 呼叫）也能直接使用核心行為。
 <!-- END_FILE: modular_decomposition.md -->
+
+<!-- START_FILE: pipeline_background_steps.md (MD5: 1c6684abc02e8d98d0cda726d8fc4fdf) -->
+---
+name: pipeline_background_steps
+trigger: always_on
+description: "多步驟 pipeline 各步驟必須獨立背景執行，各有 PID 與 log 檔，可個別終止。"
+---
+
+# Pipeline 步驟獨立背景執行規範
+
+## 核心規則
+
+多步驟 pipeline（如 extract → lookup → abstract）的每個步驟，**必須作為獨立背景 process 執行**，不得串接在同一個 shell session 中依序阻塞執行。
+
+## 執行範本
+
+```bash
+TS=$(date +%Y%m%d_%H%M%S)
+python step_a.py >> logs/step_a_$TS.log 2>&1 &
+echo "step_a PID: $!"
+
+python step_b.py >> logs/step_b_$TS.log 2>&1 &
+echo "step_b PID: $!"
+```
+
+## 為何這樣做
+
+- 可個別 `kill <PID>` 終止單一步驟，不影響其他步驟
+- 各步驟 log 獨立，方便除錯
+- 步驟之間天然形成 pipeline：各步驟 poll 自己的 queue，資料從上游流向下游，不需要等前一步驟「全部完成」
+- 一個步驟 crash 不會帶倒其他步驟
+
+## 步驟設計原則
+
+- 每個步驟都應實作 **while loop**：有資料就處理，無資料則退出
+- 步驟之間透過資料庫的「待處理狀態」傳遞訊號（如 `place_id IS NULL`），不需要明確的 inter-process communication
+- 這樣所有步驟可同時啟動，各自追著上游的進度跑
+<!-- END_FILE: pipeline_background_steps.md -->
+
+<!-- START_FILE: prefer-ssh-over-gui-access.md (MD5: adf25ee6d80c5556c692001b711bfd59) -->
+---
+name: prefer-ssh-over-gui-access
+trigger: model_decision
+description: "當需要提供遠端存取方案時，預設使用 SSH 而非 VNC 或其他 GUI 桌面串流服務。"
+---
+
+# 遠端存取偏好：SSH 優先
+
+## 規則
+
+需要讓使用者遠端存取服務或介面時：
+
+- **優先**：開放 SSH port，讓使用者透過 SSH tunnel 或直連存取
+- **避免**：預設啟動 VNC、RDP 或其他 GUI 桌面串流服務
+
+## 禁止行為
+
+- 不得在未說明理由的情況下，預設提供 VNC/RDP 解法
+
+## 適用情境
+
+| 情境 | 建議方案 |
+|------|----------|
+| 遠端執行指令、傳輸檔案、查看日誌 | SSH |
+| 服務本身無法在非圖形環境運作（桌面應用、瀏覽器視覺除錯）| 可選 VNC，需先說明原因並確認 |
+
+## 例外
+
+若服務本身需要圖形介面，可提供 VNC，但必須：
+1. 說明為何 SSH 無法滿足需求
+2. 取得使用者確認後再啟動
+<!-- END_FILE: prefer-ssh-over-gui-access.md -->
 
 <!-- START_FILE: project_setup_files.md (MD5: c43e55602c9d2b4de753817838c8581f) -->
 ---
