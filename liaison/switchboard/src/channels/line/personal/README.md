@@ -189,6 +189,8 @@ chunks 格式（5 個 base64）：`[IV(16B), ciphertext, seqKeyId(12B), senderKe
 | Outbound send video | ✅ `send_video.py`（E2EE V2 影片） |
 | Outbound send file  | ✅ `send_file.py`（E2EE V2 任意檔案） |
 | Download image | ✅ `download_image.py`（E2EE V2 圖片解密） |
+| Download video | ✅ `download_video.py`（E2EE V2 影片解密） |
+| Download file  | ✅ `download_file.py`（E2EE V2 檔案解密） |
 | E2EE 加密模組 | ✅ `encrypt_e2ee.py` |
 | Message processor | ✅ `src/processors/line_personal.py` |
 
@@ -228,3 +230,48 @@ uv run send_video.py --to <mid> --file video.mp4
 4. **無 MEDIA_CONTENT_INFO**：影片不需要，與圖片不同
 5. **Preview**：縮圖 JPEG（第一幀）加密後上傳至 `{oid}__ud-preview`，讓 mobile 顯示縮圖
 6. **依賴**：`av`（PyAV）— 擷取影片第一幀作縮圖；若未安裝則無縮圖但仍可發送
+
+### 下載影片
+
+```bash
+uv run download_video.py --msg-id <id> --out /tmp/out.mp4
+```
+
+解密使用 **chunked HMAC** 驗證（與圖片/音訊/檔案的 single HMAC 不同）。
+
+## 發送音訊
+
+```bash
+uv run send_audio.py --to <mid> --file audio.m4a
+```
+
+- contentType `3`（EU.AUDIO），SID `ema`，OBS 路徑 `/r/talk/ema/`
+- Single HMAC，無 ud-preview / ud-hash
+- contentMetadata：`DURATION`（毫秒）、`FILE_SIZE`、`SID`、`OID`
+
+### 下載音訊
+
+音訊下載與圖片流程相同（single HMAC），可直接使用 `download_image.py` 或參考其實作：
+
+```bash
+# 手動使用 download_image.py（改輸出副檔名）
+uv run download_image.py --msg-id <id> --out /tmp/out.m4a
+```
+
+## 發送檔案
+
+```bash
+uv run send_file.py --to <mid> --file document.pdf
+```
+
+- contentType `14`（EU.FILE），SID `emf`，OBS 路徑 `/r/talk/emf/`
+- Single HMAC，無 ud-preview / ud-hash
+- contentMetadata：`FILE_SIZE`、`FILE_NAME`（原始檔名）、`SID`、`OID`
+
+### 下載檔案
+
+```bash
+uv run download_file.py --msg-id <id> [--out-dir /tmp]
+```
+
+以原始 `FILE_NAME`（取自 contentMetadata）儲存至指定目錄。
