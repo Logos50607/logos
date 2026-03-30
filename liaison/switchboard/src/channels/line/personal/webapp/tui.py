@@ -182,6 +182,8 @@ class TuiApp(App):
             self._connected  = True
             self.sub_title   = "已連線"
             self.notify("已連線到 LINE ✓")
+            # 自動同步聯絡人名稱
+            self.run_worker(self._sync_contacts(), name="contacts")
         except Exception as e:
             self.notify(f"連線失敗: {e}", severity="error")
 
@@ -224,6 +226,18 @@ class TuiApp(App):
                         self._append_message(m, mid)
         except Exception as e:
             self.log.error(f"poll: {e}")
+
+    async def _sync_contacts(self) -> None:
+        try:
+            from fetch_contacts import fetch_contacts
+            new = await fetch_contacts(self._page)
+            if new:
+                self._contacts.update(new)
+                _NAMES.write_text(json.dumps(self._contacts, ensure_ascii=False, indent=2))
+                self._rebuild_list()
+                self.notify(f"已載入 {len(new)} 個聯絡人名稱")
+        except Exception as e:
+            self.log.error(f"sync_contacts: {e}")
 
     async def _refresh_chat(self, mid: str) -> None:
         if not self._connected: return
