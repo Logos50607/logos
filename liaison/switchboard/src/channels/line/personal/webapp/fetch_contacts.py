@@ -39,8 +39,7 @@ async def _all_contact_ids(page, token: str) -> list[str]:
     hmac     = await compute_hmac(page, token, _PATH_ALL_IDS, json.dumps(body_obj))
     result   = call_api(_PATH_ALL_IDS, body_obj, token, hmac)
     if result.get("code") != 0:
-        print(f"getAllContactIds 失敗: {result}", flush=True)
-        return []
+        raise RuntimeError(f"getAllContactIds 失敗: {result}")
     ids = result.get("data") or []
     print(f"    getAllContactIds → {len(ids)} 筆", flush=True)
     return [i for i in ids if isinstance(i, str)]
