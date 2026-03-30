@@ -334,12 +334,12 @@ class TuiApp(App):
                 msgs = await fetch_chat_messages(self._page, token, mid, 30)
                 if msgs:
                     self._data[mid] = msgs
-                self._rebuild_list()
-                if self.current_chat == mid:
-                    self._show_messages(mid)
+                    if self.current_chat == mid:
+                        self._show_messages(mid)
                 if i % 5 == 4:
                     _save_messages(self._data)
             _save_messages(self._data)
+            self._rebuild_list()   # 全部載完才重建一次側欄
             self.sub_title = "已連線"
             self.notify(f"全部 {total} 個聊天室載入完成 ✓")
         except Exception as e:
