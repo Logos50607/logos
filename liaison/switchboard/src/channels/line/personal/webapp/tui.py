@@ -133,15 +133,15 @@ class ContactPickerScreen(ModalScreen):
             yield ListView(id="picker-list")
 
     def on_mount(self) -> None:
-        self._render(self._all)
+        self._fill_list(self._all)
         self.query_one("#picker-search", Input).focus()
 
     def on_input_changed(self, ev: Input.Changed) -> None:
         q = ev.value.lower()
-        self._render([(m, d) for m, d in self._all
-                      if q in d.lower() or q in m.lower()])
+        self._fill_list([(m, d) for m, d in self._all
+                         if q in d.lower() or q in m.lower()])
 
-    def _render(self, items) -> None:
+    def _fill_list(self, items) -> None:
         lv = self.query_one("#picker-list", ListView)
         lv.clear()
         for mid, display in items:
