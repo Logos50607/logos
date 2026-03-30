@@ -303,9 +303,12 @@ class TuiApp(App):
 
     def action_quit(self) -> None:
         """直接強制退出，跳過 textual shutdown（worker 可能卡在 playwright evaluate）。"""
-        import os
+        import os, sys
         with _LOG.open("a") as f:
             f.write(f"[{datetime.now()}] action_quit called\n")
+        # 離開 alternate screen buffer、顯示 cursor、重設顏色，再還原 terminal 模式
+        sys.stdout.write("\033[?1049l\033[?25h\033[0m\r\n")
+        sys.stdout.flush()
         os.system("stty sane")
         os._exit(0)
 
