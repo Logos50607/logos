@@ -27,8 +27,9 @@ _PATH_CONTACTS     = "/api/talk/thrift/Talk/TalkService/getContacts"
 _PATH_GROUPS       = "/api/talk/thrift/Talk/TalkService/getGroupsV2"
 _PATH_GROUP_IDS    = "/api/talk/thrift/Talk/TalkService/getGroupIdsJoined"
 _PATH_ROOM_IDS     = "/api/talk/thrift/Talk/TalkService/getRoomIdsJoined"
-_CONTACTS_JSON     = Path(__file__).parent / "contacts.json"
-_MESSAGES_JSON     = ROOT / "messages.json"
+_DATA_DIR          = ROOT / "data"
+_CONTACTS_JSON     = _DATA_DIR / "friends.json"   # 獨立執行 fetch_contacts.py 時的輸出
+_MESSAGES_JSON     = _DATA_DIR / "messages.json"
 _BATCH             = 100   # getContacts 每批上限
 
 
@@ -146,13 +147,20 @@ async def main():
         contacts = await fetch_contacts(page)
 
         if contacts:
-            existing = {}
-            if _CONTACTS_JSON.exists():
-                existing = json.loads(_CONTACTS_JSON.read_text())
-            existing.update(contacts)
-            _CONTACTS_JSON.write_text(
-                json.dumps(existing, ensure_ascii=False, indent=2))
-            print(f">>> 已儲存 {len(existing)} 筆到{_CONTACTS_JSON}", flush=True)
+            _DATA_DIR.mkdir(exist_ok=True)
+            friends_path = _DATA_DIR / "friends.json"
+            groups_path  = _DATA_DIR / "groups.json"
+            existing_f = json.loads(friends_path.read_text()) if friends_path.exists() else {}
+            existing_g = json.loads(groups_path.read_text())  if groups_path.exists()  else {}
+            for mid, name in contacts.items():
+                if mid.startswith("U"):
+                    existing_f[mid] = name
+                else:
+                    existing_g[mid] = name
+            friends_path.write_text(json.dumps(existing_f, ensure_ascii=False, indent=2))
+            groups_path.write_text(json.dumps(existing_g,  ensure_ascii=False, indent=2))
+            print(f">>> 已儲存 {len(existing_f)} 位好友 → {friends_path}", flush=True)
+            print(f">>> 已儲存 {len(existing_g)} 個群組 → {groups_path}", flush=True)
             for mid, name in list(contacts.items())[:8]:
                 print(f"    {mid[:20]}… → {name}")
         else:

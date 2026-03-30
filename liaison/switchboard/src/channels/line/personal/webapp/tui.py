@@ -36,8 +36,11 @@ from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Ri
 ROOT   = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-_MSGS  = ROOT / "messages.json"
-_NAMES = Path(__file__).parent / "contacts.json"
+_DATA    = ROOT / "data"
+_DATA.mkdir(exist_ok=True)
+_MSGS    = _DATA / "messages.json"
+_FRIENDS = _DATA / "friends.json"
+_GROUPS  = _DATA / "groups.json"
 
 _CT = {
     0:  "",
@@ -72,8 +75,32 @@ def _preview(m: dict) -> str:
     if dur:      return f"{_CT.get(ct,'?')} ({int(dur)//1000}s)"
     return _CT.get(ct, f"[type {ct}]")
 
+def _migrate_legacy() -> None:
+    """將舊路徑的資料搬移到 data/ 目錄（一次性）。"""
+    old_msgs = ROOT / "messages.json"
+    if old_msgs.exists() and not _MSGS.exists():
+        old_msgs.rename(_MSGS)
+    old_contacts = Path(__file__).parent / "contacts.json"
+    if old_contacts.exists() and not _FRIENDS.exists() and not _GROUPS.exists():
+        existing = json.loads(old_contacts.read_text())
+        friends = {m: n for m, n in existing.items() if m.startswith("U")}
+        groups  = {m: n for m, n in existing.items()
+                   if m.startswith("C") or m.startswith("R")}
+        _FRIENDS.write_text(json.dumps(friends, ensure_ascii=False, indent=2))
+        _GROUPS.write_text(json.dumps(groups,   ensure_ascii=False, indent=2))
+
+
 def _load_contacts() -> dict:
-    return json.loads(_NAMES.read_text()) if _NAMES.exists() else {}
+    contacts = {}
+    for p in (_FRIENDS, _GROUPS):
+        if p.exists():
+            contacts.update(json.loads(p.read_text()))
+    return contacts
+
+
+def _save_contacts(friends: dict, groups: dict) -> None:
+    _FRIENDS.write_text(json.dumps(friends, ensure_ascii=False, indent=2))
+    _GROUPS.write_text(json.dumps(groups, ensure_ascii=False, indent=2))
 
 def _load_messages() -> dict:
     return json.loads(_MSGS.read_text()) if _MSGS.exists() else {}
@@ -207,6 +234,7 @@ class TuiApp(App):
     def on_mount(self) -> None:
         self.title     = "LINE Personal"
         self.sub_title = "連線中…"
+        _migrate_legacy()
         self._data     = _load_messages()
         self._contacts = _load_contacts()
         self._rebuild_list()
@@ -255,20 +283,10 @@ class TuiApp(App):
         if self._connected:
             self.run_worker(self._refresh_chat(mid), name="refresh-pick")
 
-    async def on_unmount(self) -> None:
-        """退出時先取消背景 workers，再關閉 Playwright，避免 terminal 凍結。"""
-        import asyncio
+    def action_quit(self) -> None:
+        """退出：同步取消所有 workers，交由 OS 清掉 CDP websocket。"""
         self.workers.cancel_all()
-        if self._browser:
-            try:
-                await asyncio.wait_for(self._browser.close(), timeout=3)
-            except Exception:
-                pass
-        if self._pw:
-            try:
-                await asyncio.wait_for(self._pw.stop(), timeout=3)
-            except Exception:
-                pass
+        self.exit()
 
     # ── 非同步任務 ───────────────────────────────────────────────
 
@@ -349,9 +367,8 @@ class TuiApp(App):
 
     async def _fetch_new(self) -> None:
         try:
-            from gw_client import get_access_token
             from fetch_messages import fetch_chat_messages
-            token   = await get_access_token(self._page)
+            token   = await self._get_token()
             changed = False
             for mid in self._order:
                 known = {m["id"] for m in self._data.get(mid, [])}
@@ -379,9 +396,12 @@ class TuiApp(App):
             new = await fetch_contacts(self._page, await self._get_token())
             if new:
                 self._contacts.update(new)
-                _NAMES.write_text(json.dumps(self._contacts, ensure_ascii=False, indent=2))
+                friends = {m: n for m, n in self._contacts.items() if m.startswith("U")}
+                groups  = {m: n for m, n in self._contacts.items()
+                           if m.startswith("C") or m.startswith("R")}
+                _save_contacts(friends, groups)
                 self._rebuild_list()
-                self.notify(f"已載入 {len(new)} 個聯絡人名稱")
+                self.notify(f"已載入 {len(friends)} 位好友、{len(groups)} 個群組")
         except Exception as e:
             self.log.error(f"sync_contacts: {e}")
 
