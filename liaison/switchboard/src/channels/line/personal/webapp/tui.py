@@ -393,6 +393,7 @@ class TuiApp(App):
     async def _sync_contacts(self) -> None:
         try:
             from fetch_contacts import fetch_contacts
+            self.sub_title = "同步聯絡人…"
             new = await fetch_contacts(self._page, await self._get_token())
             if new:
                 self._contacts.update(new)
@@ -402,8 +403,13 @@ class TuiApp(App):
                 _save_contacts(friends, groups)
                 self._rebuild_list()
                 self.notify(f"已載入 {len(friends)} 位好友、{len(groups)} 個群組")
+            else:
+                self.notify("聯絡人同步回傳 0 筆（LINE API 無回應或無好友）",
+                            severity="warning")
+            self.sub_title = "已連線"
         except Exception as e:
-            self.log.error(f"sync_contacts: {e}")
+            self.sub_title = "已連線"
+            self.notify(f"聯絡人同步失敗: {e}", severity="error")
 
     async def _refresh_chat(self, mid: str) -> None:
         if not self._connected: return
