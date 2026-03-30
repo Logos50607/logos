@@ -23,10 +23,9 @@ from playwright.async_api import async_playwright
 from gw_client import CDP_URL, find_ext_page, get_access_token, compute_hmac, call_api
 
 _PATH_ALL_IDS      = "/api/talk/thrift/Talk/TalkService/getAllContactIds"
-_PATH_CONTACTS     = "/api/talk/thrift/Talk/TalkService/getContacts"
+_PATH_CONTACTS     = "/api/talk/thrift/Talk/TalkService/getContactsV2"
 _PATH_GROUPS       = "/api/talk/thrift/Talk/TalkService/getGroupsV2"
-_PATH_GROUP_IDS    = "/api/talk/thrift/Talk/TalkService/getGroupIdsJoined"
-_PATH_ROOM_IDS     = "/api/talk/thrift/Talk/TalkService/getRoomIdsJoined"
+_PATH_CHAT_MIDS    = "/api/talk/thrift/Talk/TalkService/getAllChatMids"
 _DATA_DIR          = ROOT / "data"
 _CONTACTS_JSON     = _DATA_DIR / "friends.json"   # 獨立執行 fetch_contacts.py 時的輸出
 _MESSAGES_JSON     = _DATA_DIR / "messages.json"
@@ -46,16 +45,16 @@ async def _all_contact_ids(page, token: str) -> list[str]:
 
 
 async def _fetch_names(page, token: str, mids: list[str]) -> dict[str, str]:
-    """分批呼叫 getContacts，回傳 {mid: displayName}。"""
+    """分批呼叫 getContactsV2，回傳 {mid: displayName}。"""
     contacts = {}
     for i in range(0, len(mids), _BATCH):
         batch    = mids[i:i + _BATCH]
         body_obj = [batch]
         hmac     = await compute_hmac(page, token, _PATH_CONTACTS, json.dumps(body_obj))
         result   = call_api(_PATH_CONTACTS, body_obj, token, hmac)
-        for c in result.get("data") or []:
-            mid  = c.get("mid") or c.get("id") or ""
-            name = (c.get("displayName") or c.get("name") or "").strip()
+        # getContactsV2: data.contacts[mid].contact.displayName
+        for mid, v in (result.get("data") or {}).get("contacts", {}).items():
+            name = (v.get("contact", {}).get("displayName") or "").strip()
             if mid and name:
                 contacts[mid] = name
     return contacts
@@ -78,7 +77,7 @@ async def _fetch_group_names(page, token: str, group_ids: list[str]) -> dict[str
 
 
 async def _ids_from_path(page, token: str, path: str) -> list[str]:
-    """呼叫回傳 ID 清單的 API，例如 getGroupIdsJoined / getRoomIdsJoined。"""
+    """呼叫回傳 ID 清單的 API（泛用）。"""
     body_obj = []
     hmac     = await compute_hmac(page, token, path, json.dumps(body_obj))
     result   = call_api(path, body_obj, token, hmac)
@@ -87,20 +86,25 @@ async def _ids_from_path(page, token: str, path: str) -> list[str]:
 
 
 async def get_all_chat_ids(page, token: str) -> set[str]:
-    """回傳所有 1-on-1（U）、群組（C）、Room（R）的 mid 集合。"""
+    """回傳所有 1-on-1（U）、群組（C）的 mid 集合。"""
     ids: set[str] = set()
 
+    # 好友
     contacts = await _all_contact_ids(page, token)
     ids.update(contacts)
 
-    for path in (_PATH_GROUP_IDS, _PATH_ROOM_IDS):
-        try:
-            group_ids = await _ids_from_path(page, token, path)
-            ids.update(group_ids)
-        except Exception:
-            pass
+    # 群組：getAllChatMids → memberChatMids
+    try:
+        body_obj = []
+        hmac     = await compute_hmac(page, token, _PATH_CHAT_MIDS, json.dumps(body_obj))
+        result   = call_api(_PATH_CHAT_MIDS, body_obj, token, hmac)
+        data     = result.get("data") or {}
+        for key in ("memberChatMids", "invitedChatMids"):
+            ids.update(m for m in data.get(key, []) if isinstance(m, str))
+    except Exception:
+        pass
 
-    # 補上 messages.json 現有的（防止漏網之魚）
+    # 補 messages.json 現有的
     if _MESSAGES_JSON.exists():
         existing = json.loads(_MESSAGES_JSON.read_text())
         ids.update(existing.keys())

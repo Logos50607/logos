@@ -50,18 +50,18 @@ def test_group_ids_no_groups(tmp_path, monkeypatch):
 
 async def _fake_hmac(*a, **kw): return "fake-hmac"
 
-def _mock_call_api_contacts(path, body, token, hmac):
-    batch = body[0]
-    return {"code": 0, "data": [
-        {"mid": m, "displayName": f"Name-{m[-4:]}"} for m in batch
-    ]}
+def _v2_response(batch):
+    """模擬 getContactsV2 response: data.contacts[mid].contact.displayName"""
+    return {"code": 0, "data": {"contacts": {
+        m: {"contact": {"mid": m, "displayName": f"Name-{m[-4:]}"}} for m in batch
+    }}}
 
 def test_fetch_names_basic():
     import asyncio
     page = MagicMock()
     mids = ["Uaaaa", "Ubbbb", "Ucccc"]
     with patch("fetch_contacts.compute_hmac", new=AsyncMock(return_value="h")), \
-         patch("fetch_contacts.call_api", side_effect=_mock_call_api_contacts):
+         patch("fetch_contacts.call_api", side_effect=lambda p,b,t,h: _v2_response(b[0])):
         result = asyncio.run(_fetch_names(page, "tok", mids))
     assert len(result) == 3
     assert result["Uaaaa"] == "Name-aaaa"
@@ -75,9 +75,7 @@ def test_fetch_names_batches():
     calls = []
     def spy_call(path, body, token, hmac):
         calls.append(len(body[0]))
-        return {"code": 0, "data": [
-            {"mid": m, "displayName": f"N{m}"} for m in body[0]
-        ]}
+        return _v2_response(body[0])
     with patch("fetch_contacts.compute_hmac", new=AsyncMock(return_value="h")), \
          patch("fetch_contacts.call_api", side_effect=spy_call):
         result = asyncio.run(_fetch_names(page, "tok", mids))
@@ -88,11 +86,10 @@ def test_fetch_names_skips_empty():
     import asyncio
     page = MagicMock()
     def api(path, body, token, hmac):
-        return {"code": 0, "data": [
-            {"mid": "Uaaa", "displayName": ""},     # 空名字 → 跳過
-            {"mid": "",     "displayName": "Ghost"}, # 空 mid → 跳過
-            {"mid": "Ubbb", "displayName": "Bob"},
-        ]}
+        return {"code": 0, "data": {"contacts": {
+            "Uaaa": {"contact": {"mid": "Uaaa", "displayName": ""}},   # 空名字 → 跳過
+            "Ubbb": {"contact": {"mid": "Ubbb", "displayName": "Bob"}},
+        }}}
     with patch("fetch_contacts.compute_hmac", new=AsyncMock(return_value="h")), \
          patch("fetch_contacts.call_api", side_effect=api):
         result = asyncio.run(_fetch_names(page, "tok", ["Uaaa", "Ubbb"]))
@@ -158,8 +155,8 @@ def test_ids_from_path_empty_data():
 # ── get_all_chat_ids ──────────────────────────────────────────────
 
 def test_get_all_chat_ids_combines_sources(tmp_path, monkeypatch):
-    """好友 + 群組 + messages.json 三來源合併。"""
-    import asyncio, fetch_contacts as fc
+    """好友 + 群組（getAllChatMids）+ messages.json 三來源合併。"""
+    import asyncio
 
     msgs_file = tmp_path / "messages.json"
     msgs_file.write_text(json.dumps({"Uexisting": [], "Cexisting": []}))
@@ -168,19 +165,20 @@ def test_get_all_chat_ids_combines_sources(tmp_path, monkeypatch):
     async def fake_all_contact_ids(page, token):
         return ["Ufriend1", "Ufriend2"]
 
-    async def fake_ids_from_path(page, token, path):
-        if "Group" in path:
-            return ["Cgroup1"]
-        return ["Rroom1"]
+    def api(path, body, token, hmac):
+        return {"code": 0, "data": {
+            "memberChatMids": ["Cgroup1"],
+            "invitedChatMids": [],
+        }}
 
     with patch("fetch_contacts._all_contact_ids", side_effect=fake_all_contact_ids), \
-         patch("fetch_contacts._ids_from_path", side_effect=fake_ids_from_path):
+         patch("fetch_contacts.compute_hmac", new=AsyncMock(return_value="h")), \
+         patch("fetch_contacts.call_api", side_effect=api):
         result = asyncio.run(get_all_chat_ids(MagicMock(), "tok"))
 
     assert "Ufriend1" in result
     assert "Ufriend2" in result
     assert "Cgroup1" in result
-    assert "Rroom1" in result
     assert "Uexisting" in result
     assert "Cexisting" in result
 

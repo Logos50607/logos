@@ -340,30 +340,32 @@ class TuiApp(App):
             _log_exc("connect_cdp 失敗")
 
     async def _preload_recent(self) -> None:
-        """取得全部好友+群組 ID，分批載入所有對話，標題顯示進度。"""
+        """只抓尚無本地資料的新聊天室，已有資料的靠 poll 增量更新。"""
         try:
             from fetch_messages import fetch_chat_messages
             from fetch_contacts import get_all_chat_ids
             token   = await self._get_token()
             all_ids = await get_all_chat_ids(self._page, token)
-            # 已有對話的排前面（依最後訊息時間），新 ID 排後面
-            known_t = {mid: max(int(m.get("createdTime", 0)) for m in msgs)
-                       for mid, msgs in self._data.items() if msgs}
-            order = sorted(all_ids, key=lambda m: known_t.get(m, 0), reverse=True)
-            total = len(order)
-            for i, mid in enumerate(order):
-                self.sub_title = f"載入 {i+1}/{total}…"
+            # 只抓本地沒有訊息的聊天室
+            new_ids = [m for m in all_ids if not self._data.get(m)]
+            total   = len(new_ids)
+            if not new_ids:
+                self.sub_title = "已連線"
+                self._rebuild_list()
+                return
+            for i, mid in enumerate(new_ids):
+                self.sub_title = f"初始載入 {i+1}/{total}…"
                 msgs = await fetch_chat_messages(self._page, token, mid, 30)
                 if msgs:
                     self._data[mid] = msgs
                     if self.current_chat == mid:
                         self._show_messages(mid)
-                if i % 5 == 4:
+                if i % 10 == 9:
                     _save_messages(self._data)
             _save_messages(self._data)
-            self._rebuild_list()   # 全部載完才重建一次側欄
+            self._rebuild_list()
             self.sub_title = "已連線"
-            self.notify(f"全部 {total} 個聊天室載入完成 ✓")
+            self.notify(f"新增 {total} 個聊天室 ✓")
         except Exception as e:
             self.sub_title = "已連線"
             _log_exc("preload 失敗")
