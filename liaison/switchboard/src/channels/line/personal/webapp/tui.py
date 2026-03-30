@@ -271,21 +271,28 @@ class TuiApp(App):
             self.notify(f"連線失敗: {e}", severity="error")
 
     async def _preload_recent(self) -> None:
-        """連線後重新抓最近 10 個聊天室的最新訊息，確保資料新鮮。"""
+        """分批載入所有聊天室訊息，標題顯示進度，每 5 筆存一次。"""
         try:
             from gw_client import get_access_token
             from fetch_messages import fetch_chat_messages
             token = await get_access_token(self._page)
-            for mid in self._order[:10]:
+            order = list(self._order)   # snapshot，避免 rebuild 期間變動
+            total = len(order)
+            for i, mid in enumerate(order):
+                self.sub_title = f"載入 {i+1}/{total}…"
                 msgs = await fetch_chat_messages(self._page, token, mid, 30)
                 if msgs:
                     self._data[mid] = msgs
+                self._rebuild_list()
+                if self.current_chat == mid:
+                    self._show_messages(mid)
+                if i % 5 == 4:
+                    _save_messages(self._data)
             _save_messages(self._data)
-            self._rebuild_list()
-            if self.current_chat:
-                self._show_messages(self.current_chat)
-            self.notify("訊息已預載完成 ✓")
+            self.sub_title = "已連線"
+            self.notify(f"全部 {total} 個聊天室載入完成 ✓")
         except Exception as e:
+            self.sub_title = "已連線"
             self.log.error(f"preload: {e}")
 
     async def _send(self, mid: str, text: str) -> None:
@@ -313,7 +320,7 @@ class TuiApp(App):
             from fetch_messages import fetch_chat_messages
             token   = await get_access_token(self._page)
             changed = False
-            for mid in self._order[:15]:
+            for mid in self._order:
                 known = {m["id"] for m in self._data.get(mid, [])}
                 fresh = await fetch_chat_messages(self._page, token, mid, 10)
                 new   = [m for m in fresh if m["id"] not in known]
