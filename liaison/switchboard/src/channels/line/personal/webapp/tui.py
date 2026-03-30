@@ -187,6 +187,8 @@ class TuiApp(App):
         self._connected: bool          = False
         self._order:    list[str]      = []
         self._unread:   dict[str, set] = {}
+        self._token:    str | None     = None
+        self._token_ts: float          = 0.0
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -253,6 +255,15 @@ class TuiApp(App):
 
     # ── 非同步任務 ───────────────────────────────────────────────
 
+    async def _get_token(self) -> str:
+        """快取 token，1 小時內重用，過期才 reload 重取。"""
+        if self._token and time.time() - self._token_ts < 3600:
+            return self._token
+        from gw_client import get_access_token
+        self._token    = await get_access_token(self._page)
+        self._token_ts = time.time()
+        return self._token
+
     async def _connect_cdp(self) -> None:
         try:
             from playwright.async_api import async_playwright
@@ -273,9 +284,8 @@ class TuiApp(App):
     async def _preload_recent(self) -> None:
         """分批載入所有聊天室訊息，標題顯示進度，每 5 筆存一次。"""
         try:
-            from gw_client import get_access_token
             from fetch_messages import fetch_chat_messages
-            token = await get_access_token(self._page)
+            token = await self._get_token()
             order = list(self._order)   # snapshot，避免 rebuild 期間變動
             total = len(order)
             for i, mid in enumerate(order):
@@ -343,7 +353,7 @@ class TuiApp(App):
     async def _sync_contacts(self) -> None:
         try:
             from fetch_contacts import fetch_contacts
-            new = await fetch_contacts(self._page)
+            new = await fetch_contacts(self._page, await self._get_token())
             if new:
                 self._contacts.update(new)
                 _NAMES.write_text(json.dumps(self._contacts, ensure_ascii=False, indent=2))
@@ -355,9 +365,8 @@ class TuiApp(App):
     async def _refresh_chat(self, mid: str) -> None:
         if not self._connected: return
         try:
-            from gw_client import get_access_token
             from fetch_messages import fetch_chat_messages
-            token = await get_access_token(self._page)
+            token = await self._get_token()
             msgs  = await fetch_chat_messages(self._page, token, mid, 50)
             self._data[mid] = msgs
             _save_messages(self._data)

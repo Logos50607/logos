@@ -39,15 +39,16 @@ def _collect_mids() -> list[str]:
     return list(mids)
 
 
-async def fetch_contacts(page) -> dict[str, str]:
-    """回傳 {mid: displayName}。"""
+async def fetch_contacts(page, token: str | None = None) -> dict[str, str]:
+    """回傳 {mid: displayName}。token 可由外部傳入以避免重複 reload。"""
     mids = _collect_mids()
     if not mids:
         print("messages.json 沒有資料", flush=True)
         return {}
 
-    print(f">>> 取得 token...", flush=True)
-    token = await get_access_token(page)
+    if token is None:
+        print(f">>> 取得 token...", flush=True)
+        token = await get_access_token(page)
 
     print(f">>> 查詢 {len(mids)} 個聯絡人...", flush=True)
     # getContacts 接受 mid 列表
