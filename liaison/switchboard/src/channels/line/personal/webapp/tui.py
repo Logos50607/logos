@@ -41,6 +41,14 @@ _DATA.mkdir(exist_ok=True)
 _MSGS    = _DATA / "messages.json"
 _FRIENDS = _DATA / "friends.json"
 _GROUPS  = _DATA / "groups.json"
+_LOG     = _DATA / "tui.log"
+
+import logging as _logging
+_logging.basicConfig(
+    filename=_LOG, level=_logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+_log = _logging.getLogger("tui")
 
 _CT = {
     0:  "",
@@ -323,6 +331,7 @@ class TuiApp(App):
             self.run_worker(self._preload_recent(), name="preload")
         except Exception as e:
             self.notify(f"連線失敗: {e}", severity="error")
+            _log.exception("connect_cdp 失敗")
 
     async def _preload_recent(self) -> None:
         """取得全部好友+群組 ID，分批載入所有對話，標題顯示進度。"""
@@ -351,7 +360,7 @@ class TuiApp(App):
             self.notify(f"全部 {total} 個聊天室載入完成 ✓")
         except Exception as e:
             self.sub_title = "已連線"
-            self.log.error(f"preload: {e}")
+            _log.exception("preload 失敗")
 
     async def _send(self, mid: str, text: str) -> None:
         from send_api import send_e2ee_text
@@ -417,6 +426,7 @@ class TuiApp(App):
         except Exception as e:
             self.sub_title = "已連線"
             self.notify(f"聯絡人同步失敗: {e}", severity="error")
+            _log.exception("sync_contacts 失敗")
 
     async def _refresh_chat(self, mid: str) -> None:
         if not self._connected: return
