@@ -300,9 +300,10 @@ class TuiApp(App):
             self.run_worker(self._refresh_chat(mid), name="refresh-pick")
 
     def action_quit(self) -> None:
-        """退出：同步取消所有 workers，交由 OS 清掉 CDP websocket。"""
-        self.workers.cancel_all()
-        self.exit()
+        """直接強制退出，跳過 textual shutdown（worker 可能卡在 playwright evaluate）。"""
+        import os
+        os.system("stty sane")
+        os._exit(0)
 
     # ── 非同步任務 ───────────────────────────────────────────────
 
@@ -503,7 +504,4 @@ class TuiApp(App):
 
 
 if __name__ == "__main__":
-    import os
     TuiApp().run()
-    os.system("stty sane")
-    os._exit(0)
