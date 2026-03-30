@@ -494,6 +494,7 @@ class TuiApp(App):
 if __name__ == "__main__":
     import os
     TuiApp().run()
-    # 連接的是外部 Chrome（CDP），不需要 playwright cleanup。
-    # 直接 os._exit 跳過 GC/atexit，避免 subprocess transport 卡死 terminal。
+    # 還原 terminal（textual 的 restore sequence 可能尚未 flush）
+    os.system("stty sane")
+    # 跳過 GC/atexit，避免 playwright subprocess transport 卡死
     os._exit(0)
