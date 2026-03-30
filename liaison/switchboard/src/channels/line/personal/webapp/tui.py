@@ -343,34 +343,32 @@ class TuiApp(App):
             _log_exc("connect_cdp 失敗")
 
     async def _preload_recent(self) -> None:
-        """只抓尚無本地資料的新聊天室，已有資料的靠 poll 增量更新。"""
+        """用 getMessageBoxes 一次取得全部 active 聊天室及最後訊息。"""
         try:
-            from fetch_messages import fetch_chat_messages
-            from fetch_contacts import get_all_chat_ids
-            token   = await self._get_token()
-            all_ids = await get_all_chat_ids(self._page, token)
-            # 只抓本地完全沒有記錄的聊天室（空 [] 代表已檢查過，不重抓）
-            new_ids = [m for m in all_ids if m not in self._data]
-            total   = len(new_ids)
-            if not new_ids:
-                self.sub_title = "已連線"
-                self._rebuild_list()
-                return
-            for i, mid in enumerate(new_ids):
-                self.sub_title = f"初始載入 {i+1}/{total}…"
-                msgs = await fetch_chat_messages(self._page, token, mid, 30)
-                self._data[mid] = msgs or []   # 空的也存，避免下次重抓
-                if msgs and self.current_chat == mid:
-                    self._show_messages(mid)
-                if i % 10 == 9:
-                    _save_messages(self._data)
+            from fetch_messages import fetch_message_boxes
+            token = await self._get_token()
+            self.sub_title = "同步聊天室…"
+            boxes = await fetch_message_boxes(self._page, token, last_msgs=30)
+            new_count = 0
+            for box in boxes:
+                mid  = box["id"]
+                msgs = box.get("lastMessages") or []
+                if mid not in self._data:
+                    new_count += 1
+                if msgs:
+                    # 用 id 去重後合併（新訊息優先，舊的不覆蓋）
+                    existing = {m["id"]: m for m in self._data.get(mid, [])}
+                    for m in msgs:
+                        existing.setdefault(m["id"], m)
+                    self._data[mid] = list(existing.values())
+                else:
+                    self._data.setdefault(mid, [])
             _save_messages(self._data)
             self._rebuild_list()
             self.sub_title = "已連線"
-            added = sum(1 for m in new_ids if self._data.get(m))
-            if added:
-                self.notify(f"新增 {added} 個聊天室 ✓")
-        except Exception as e:
+            if new_count:
+                self.notify(f"新增 {new_count} 個聊天室 ✓")
+        except Exception:
             self.sub_title = "已連線"
             _log_exc("preload 失敗")
 
@@ -394,12 +392,22 @@ class TuiApp(App):
         self.run_worker(self._fetch_new(), name="poll")
 
     async def _fetch_new(self) -> None:
+        """用 getMessageBoxes 篩出有新訊息的聊天室，再逐一抓完整更新。"""
         try:
-            from fetch_messages import fetch_chat_messages
-            token   = await self._get_token()
+            from fetch_messages import fetch_message_boxes, fetch_chat_messages
+            token = await self._get_token()
+            boxes = await fetch_message_boxes(self._page, token, last_msgs=1)
+
+            # 找出 deliveredTime 比本地最新訊息還新的聊天室
             changed = False
-            for mid in self._order:
-                known = {m["id"] for m in self._data.get(mid, [])}
+            for box in boxes:
+                mid = box["id"]
+                box_ts = int(box.get("lastDeliveredMessageId", {}).get("deliveredTime") or 0)
+                local_msgs = self._data.get(mid, [])
+                local_ts = max((int(m.get("createdTime", 0)) for m in local_msgs), default=0)
+                if box_ts <= local_ts:
+                    continue
+                known = {m["id"] for m in local_msgs}
                 fresh = await fetch_chat_messages(self._page, token, mid, 10)
                 new   = [m for m in fresh if m["id"] not in known]
                 if not new: continue
@@ -415,8 +423,8 @@ class TuiApp(App):
                         self._append_message(m, mid)
             if changed:
                 _save_messages(self._data)
-        except Exception as e:
-            self.log.error(f"poll: {e}")
+        except Exception:
+            _log_exc("fetch_new 失敗")
 
     async def _sync_contacts(self) -> None:
         try:

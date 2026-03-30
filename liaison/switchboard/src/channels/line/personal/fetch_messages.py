@@ -18,8 +18,9 @@ fetch_messages.py - 從 LINE GW 直接抓取所有聊天室的完整訊息
 
 # ── 目錄 ─────────────────────────────────────────────────────────
 # 1. parse_args
-# 2. fetch_chat_messages(...)    - getRecentMessagesV2 pagination
-# 3. main
+# 2. fetch_message_boxes(...)    - getMessageBoxes，一次取全部聊天室
+# 3. fetch_chat_messages(...)    - getRecentMessagesV2 pagination
+# 4. main
 
 import argparse
 import asyncio
@@ -44,7 +45,30 @@ def parse_args():
     return p.parse_args()
 
 
-# ── 2. 抓單一聊天室訊息（含 pagination）────────────────────────────
+# ── 2. 一次取全部聊天室清單 ──────────────────────────────────────
+
+async def fetch_message_boxes(page, access_token: str,
+                               last_msgs: int = 1) -> list[dict]:
+    """呼叫 getMessageBoxes，回傳所有 active 聊天室資訊（含 lastMessages）。
+    每個 box: {id, unreadCount, lastDeliveredMessageId.deliveredTime, lastMessages}
+    """
+    path = "/api/talk/thrift/Talk/TalkService/getMessageBoxes"
+    params = {
+        "activeOnly": True,
+        "unreadOnly": False,
+        "messageBoxCountLimit": 200,
+        "withUnreadCount": True,
+        "lastMessagesPerMessageBoxCount": last_msgs,
+    }
+    body_obj = [params, 2]
+    hmac = await compute_hmac(page, access_token, path, json.dumps(body_obj))
+    result = call_api(path, body_obj, access_token, hmac)
+    if result.get("code") != 0:
+        raise RuntimeError(f"getMessageBoxes 失敗: {result}")
+    return result["data"]["messageBoxes"]
+
+
+# ── 3. 抓單一聊天室訊息（含 pagination）────────────────────────────
 
 async def _get_recent(page, access_token, chat_mid, count) -> list:
     path = "/api/talk/thrift/Talk/TalkService/getRecentMessagesV2"
