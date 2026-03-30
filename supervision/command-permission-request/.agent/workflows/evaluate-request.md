@@ -23,6 +23,13 @@ original_prompt: <完整原始 prompt>
 
 從輸入中提取：`from`、`type`、`working_dir`、`request`、`original_prompt`
 
+### 1.5 讀取審核模式
+
+讀取 `config.md` 的 `review_mode` 欄位：
+
+- `manual` → 跳過 policy 判斷，直接執行步驟 4（轉人工）
+- `auto`（預設）→ 繼續步驟 2
+
 ### 2. 對照 permission-policy 判斷
 
 依 `permission-policy.md` 的規則順序：
