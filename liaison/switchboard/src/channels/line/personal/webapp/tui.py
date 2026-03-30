@@ -43,12 +43,13 @@ _FRIENDS = _DATA / "friends.json"
 _GROUPS  = _DATA / "groups.json"
 _LOG     = _DATA / "tui.log"
 
-import logging as _logging
-_logging.basicConfig(
-    filename=_LOG, level=_logging.DEBUG,
-    format="%(asctime)s %(levelname)s %(message)s",
-)
-_log = _logging.getLogger("tui")
+import traceback as _traceback
+
+def _log_exc(tag: str) -> None:
+    """將當前例外的完整 traceback 附加到 tui.log。"""
+    with _LOG.open("a") as f:
+        f.write(f"\n[{datetime.now()}] {tag}\n")
+        _traceback.print_exc(file=f)
 
 _CT = {
     0:  "",
@@ -331,7 +332,7 @@ class TuiApp(App):
             self.run_worker(self._preload_recent(), name="preload")
         except Exception as e:
             self.notify(f"連線失敗: {e}", severity="error")
-            _log.exception("connect_cdp 失敗")
+            _log_exc("connect_cdp 失敗")
 
     async def _preload_recent(self) -> None:
         """取得全部好友+群組 ID，分批載入所有對話，標題顯示進度。"""
@@ -360,7 +361,7 @@ class TuiApp(App):
             self.notify(f"全部 {total} 個聊天室載入完成 ✓")
         except Exception as e:
             self.sub_title = "已連線"
-            _log.exception("preload 失敗")
+            _log_exc("preload 失敗")
 
     async def _send(self, mid: str, text: str) -> None:
         from send_api import send_e2ee_text
@@ -426,7 +427,7 @@ class TuiApp(App):
         except Exception as e:
             self.sub_title = "已連線"
             self.notify(f"聯絡人同步失敗: {e}", severity="error")
-            _log.exception("sync_contacts 失敗")
+            _log_exc("sync_contacts 失敗")
 
     async def _refresh_chat(self, mid: str) -> None:
         if not self._connected: return
@@ -505,5 +506,4 @@ if __name__ == "__main__":
     import os
     TuiApp().run()
     os.system("stty sane")
-    _logging.shutdown()   # flush log buffer 後再 exit
     os._exit(0)
