@@ -6,20 +6,19 @@ tui.py - LINE 個人帳號 Terminal UI
 
 用法: uv run tui.py
 操作:
-  ↑↓       切換聊天室
-  Enter    選擇聊天室
-  Tab      聊天清單 ↔ 輸入框
-  Escape   回聊天清單
-  r        重新整理訊息
-  q        離開
+  ↑↓       切換聊天室          n    新對話（聯絡人/群組）
+  Enter    開啟聊天            r    重新整理
+  Tab      聊天清單 ↔ 輸入框   q    離開
+  Escape   回聊天清單 / 關閉
 """
 
 # 目錄:
-# 1. 常數與輔助函式
+# 1. 常數 & 輔助函式
 # 2. ChatItem widget
-# 3. TuiApp：compose / on_mount
-# 4. TuiApp：事件處理 (select / submit)
-# 5. TuiApp：非同步任務 (cdp / send / poll / refresh)
+# 3. ContactPickerScreen modal
+# 4. TuiApp：compose / on_mount / 事件處理
+# 5. TuiApp：非同步任務 (cdp / preload / send / poll / contacts / refresh)
+# 6. TuiApp：渲染 (rebuild_list / show_messages / append_message)
 
 import ast, json, sys, time
 from datetime import datetime
@@ -31,35 +30,46 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
+from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, RichLog
 
-ROOT = Path(__file__).parent.parent
+ROOT   = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-_MSGS   = ROOT / "messages.json"
-_NAMES  = Path(__file__).parent / "contacts.json"  # {mid: "顯示名稱"}（可選）
-_CT     = {0: "", 1: "📷 圖片", 2: "🎬 影片", 3: "🎵 音訊", 14: "📎 檔案"}
+_MSGS  = ROOT / "messages.json"
+_NAMES = Path(__file__).parent / "contacts.json"
+
+_CT = {
+    0:  "",
+    1:  "📷 圖片",
+    2:  "🎬 影片",
+    3:  "🎵 音訊",
+    7:  "🔖 貼圖",
+    13: "📇 聯絡人名片",
+    14: "📎 檔案",
+    15: "📍 位置",
+}
 
 
 # ── 1. 輔助 ───────────────────────────────────────────────────────
 
 def _ts(ms) -> str:
-    try: return datetime.fromtimestamp(int(ms) / 1000).strftime("%H:%M")
+    try:    return datetime.fromtimestamp(int(ms) / 1000).strftime("%H:%M")
     except: return ""
 
 def _meta(m: dict) -> dict:
     v = m.get("contentMetadata", {})
     if isinstance(v, str):
-        try: return ast.literal_eval(v)
+        try:    return ast.literal_eval(v)
         except: return {}
     return v or {}
 
 def _preview(m: dict) -> str:
     ct = int(m.get("contentType", 0))
-    if ct == 0:   return str(m.get("text", ""))[:40]
-    if ct == 14:  return f"📎 {_meta(m).get('FILE_NAME', '檔案')}"
+    if ct == 0:  return str(m.get("text", ""))[:40]
+    if ct == 14: return f"📎 {_meta(m).get('FILE_NAME', '檔案')}"
     dur = _meta(m).get("DURATION")
-    if dur:       return f"{_CT.get(ct,'?')} ({int(dur)//1000}s)"
+    if dur:      return f"{_CT.get(ct,'?')} ({int(dur)//1000}s)"
     return _CT.get(ct, f"[type {ct}]")
 
 def _load_contacts() -> dict:
@@ -68,16 +78,19 @@ def _load_contacts() -> dict:
 def _load_messages() -> dict:
     return json.loads(_MSGS.read_text()) if _MSGS.exists() else {}
 
+def _save_messages(data: dict) -> None:
+    _MSGS.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
 
 # ── 2. ChatItem ───────────────────────────────────────────────────
 
 class ChatItem(ListItem):
     def __init__(self, mid: str, label: str, preview: str, unread: int = 0):
         super().__init__()
-        self.mid      = mid
-        self.label    = label
-        self.preview  = preview
-        self.unread   = unread
+        self.mid     = mid
+        self.label   = label
+        self.preview = preview
+        self.unread  = unread
 
     def compose(self) -> ComposeResult:
         badge = f" [bold red]({self.unread})[/]" if self.unread else ""
@@ -85,7 +98,62 @@ class ChatItem(ListItem):
         yield Label(f"[dim]{self.preview}[/]",       markup=True)
 
 
-# ── 3. App ────────────────────────────────────────────────────────
+# ── 3. ContactPickerScreen ────────────────────────────────────────
+
+class ContactPickerScreen(ModalScreen):
+    """按 n 開啟；上下選擇，Enter 確認，Esc 關閉。"""
+    BINDINGS = [Binding("escape", "dismiss", "關閉")]
+    CSS = """
+    ContactPickerScreen { align: center middle; }
+    #picker-box {
+        width: 52; height: 22;
+        border: double $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+    #picker-list { height: 1fr; margin-top: 1; }
+    """
+
+    def __init__(self, contacts: dict, known_mids):
+        super().__init__()
+        seen, self._all = set(), []
+        for mid, name in sorted(contacts.items(), key=lambda x: x[1].lower()):
+            icon = "👥 " if mid.startswith("C") else "🙍 "
+            self._all.append((mid, f"{icon}{name}"))
+            seen.add(mid)
+        for mid in known_mids:
+            if mid not in seen:
+                icon = "👥 " if mid.startswith("C") else "🙍 "
+                self._all.append((mid, f"{icon}{mid[:22]}…"))
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="picker-box"):
+            yield Label("[bold]開啟對話[/bold]  [dim](輸入篩選)[/dim]", markup=True)
+            yield Input(placeholder="搜尋聯絡人 / 群組…", id="picker-search")
+            yield ListView(id="picker-list")
+
+    def on_mount(self) -> None:
+        self._render(self._all)
+        self.query_one("#picker-search", Input).focus()
+
+    def on_input_changed(self, ev: Input.Changed) -> None:
+        q = ev.value.lower()
+        self._render([(m, d) for m, d in self._all
+                      if q in d.lower() or q in m.lower()])
+
+    def _render(self, items) -> None:
+        lv = self.query_one("#picker-list", ListView)
+        lv.clear()
+        for mid, display in items:
+            li = ListItem(Label(display, markup=False))
+            li._pick_mid = mid
+            lv.append(li)
+
+    def on_list_view_selected(self, ev: ListView.Selected) -> None:
+        self.dismiss(getattr(ev.item, "_pick_mid", None))
+
+
+# ── 4. App ────────────────────────────────────────────────────────
 
 CSS = """
 Screen { layout: vertical; }
@@ -102,22 +170,23 @@ ChatItem.--highlight { background: $primary-darken-1; }
 class TuiApp(App):
     CSS = CSS
     BINDINGS = [
-        Binding("q",      "quit",            "離開"),
-        Binding("r",      "refresh",         "重新整理"),
-        Binding("escape", "focus_list",      "聊天清單"),
-        Binding("tab",    "focus_input",     "輸入框", show=False),
+        Binding("q",      "quit",       "離開"),
+        Binding("n",      "new_chat",   "新對話"),
+        Binding("r",      "refresh",    "重新整理"),
+        Binding("escape", "focus_list", "聊天清單"),
+        Binding("tab",    "focus_input","輸入框", show=False),
     ]
     current_chat: reactive[str | None] = reactive(None)
 
     def __init__(self):
         super().__init__()
-        self._data:      dict       = {}
-        self._contacts:  dict       = {}
-        self._my_mid:    str | None = None
-        self._page                  = None
-        self._connected: bool       = False
-        self._order:     list[str]  = []   # chat mids sorted by recency
-        self._unread:    dict[str, set] = {}  # mid → set of new msg ids
+        self._data:     dict           = {}
+        self._contacts: dict           = {}
+        self._my_mid:   str | None     = None
+        self._page                     = None
+        self._connected: bool          = False
+        self._order:    list[str]      = []
+        self._unread:   dict[str, set] = {}
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -132,7 +201,7 @@ class TuiApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title    = "LINE Personal"
+        self.title     = "LINE Personal"
         self.sub_title = "連線中…"
         self._data     = _load_messages()
         self._contacts = _load_contacts()
@@ -140,8 +209,7 @@ class TuiApp(App):
         self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
         self.set_interval(30, self._poll)
 
-
-# ── 4. 事件處理 ───────────────────────────────────────────────────
+    # ── 事件處理 ─────────────────────────────────────────────────
 
     def on_list_view_selected(self, ev: ListView.Selected) -> None:
         item = ev.item
@@ -158,34 +226,67 @@ class TuiApp(App):
         ev.input.clear()
         if not self._connected:
             self.notify("尚未連線，請稍候", severity="warning"); return
-        mid = self.current_chat
-        self.run_worker(self._send(mid, text), name="send")
+        self.run_worker(self._send(self.current_chat, text), name="send")
 
     def action_focus_list(self)  -> None: self.query_one("#chat-list").focus()
     def action_focus_input(self) -> None: self.query_one("#input").focus()
-    def action_refresh(self)     -> None:
+
+    def action_refresh(self) -> None:
         if self.current_chat:
             self.run_worker(self._refresh_chat(self.current_chat), name="refresh")
 
+    def action_new_chat(self) -> None:
+        self.push_screen(
+            ContactPickerScreen(self._contacts, set(self._data.keys())),
+            self._on_chat_picked,
+        )
 
-# ── 5. 非同步任務 ─────────────────────────────────────────────────
+    def _on_chat_picked(self, mid: str | None) -> None:
+        if not mid: return
+        self._data.setdefault(mid, [])
+        self.current_chat = mid
+        self._rebuild_list()
+        self._show_messages(mid)
+        self.query_one("#input", Input).focus()
+        if self._connected:
+            self.run_worker(self._refresh_chat(mid), name="refresh-pick")
+
+    # ── 非同步任務 ───────────────────────────────────────────────
 
     async def _connect_cdp(self) -> None:
         try:
             from playwright.async_api import async_playwright
             from gw_client import CDP_URL, find_ext_page
             from send_api import get_my_info
-            pw   = await async_playwright().start()
-            b    = await pw.chromium.connect_over_cdp(CDP_URL)
+            pw = await async_playwright().start()
+            b  = await pw.chromium.connect_over_cdp(CDP_URL)
             self._page    = find_ext_page(b.contexts[0])
             self._my_mid, _ = await get_my_info(self._page)
             self._connected  = True
             self.sub_title   = "已連線"
             self.notify("已連線到 LINE ✓")
-            # 自動同步聯絡人名稱
             self.run_worker(self._sync_contacts(), name="contacts")
+            self.run_worker(self._preload_recent(), name="preload")
         except Exception as e:
             self.notify(f"連線失敗: {e}", severity="error")
+
+    async def _preload_recent(self) -> None:
+        """連線後重新抓最近 10 個聊天室的最新訊息，確保資料新鮮。"""
+        try:
+            from gw_client import get_access_token
+            from fetch_messages import fetch_chat_messages
+            token = await get_access_token(self._page)
+            for mid in self._order[:10]:
+                msgs = await fetch_chat_messages(self._page, token, mid, 30)
+                if msgs:
+                    self._data[mid] = msgs
+            _save_messages(self._data)
+            self._rebuild_list()
+            if self.current_chat:
+                self._show_messages(self.current_chat)
+            self.notify("訊息已預載完成 ✓")
+        except Exception as e:
+            self.log.error(f"preload: {e}")
 
     async def _send(self, mid: str, text: str) -> None:
         from send_api import send_e2ee_text
@@ -196,6 +297,7 @@ class TuiApp(App):
                    "createdTime": str(int(time.time() * 1000)),
                    "id": f"local-{result['seq']}"}
             self._data.setdefault(mid, []).append(msg)
+            _save_messages(self._data)
             if self.current_chat == mid:
                 self._append_message(msg, mid)
         else:
@@ -209,7 +311,8 @@ class TuiApp(App):
         try:
             from gw_client import get_access_token
             from fetch_messages import fetch_chat_messages
-            token = await get_access_token(self._page)
+            token   = await get_access_token(self._page)
+            changed = False
             for mid in self._order[:15]:
                 known = {m["id"] for m in self._data.get(mid, [])}
                 fresh = await fetch_chat_messages(self._page, token, mid, 10)
@@ -217,13 +320,16 @@ class TuiApp(App):
                 if not new: continue
                 self._data.setdefault(mid, []).extend(new)
                 self._unread.setdefault(mid, set()).update(m["id"] for m in new)
-                print("\a", end="", flush=True)   # terminal bell
-                name = self._contacts.get(mid, mid[:12] + "…")
-                self.notify(f"💬 {name}: {_preview(new[-1])}")
+                changed = True
+                print("\a", end="", flush=True)
+                label = self._contacts.get(mid, mid[:12] + "…")
+                self.notify(f"💬 {label}: {_preview(new[-1])}")
                 self._rebuild_list()
                 if self.current_chat == mid:
                     for m in sorted(new, key=lambda x: int(x.get("createdTime", 0))):
                         self._append_message(m, mid)
+            if changed:
+                _save_messages(self._data)
         except Exception as e:
             self.log.error(f"poll: {e}")
 
@@ -247,30 +353,26 @@ class TuiApp(App):
             token = await get_access_token(self._page)
             msgs  = await fetch_chat_messages(self._page, token, mid, 50)
             self._data[mid] = msgs
+            _save_messages(self._data)
             self._show_messages(mid)
         except Exception as e:
             self.notify(f"重新整理失敗: {e}", severity="error")
 
-
-# ── 清單 & 訊息渲染 ───────────────────────────────────────────────
+    # ── 渲染 ─────────────────────────────────────────────────────
 
     def _rebuild_list(self) -> None:
-        chats = []
-        for mid, msgs in self._data.items():
-            if not msgs: continue
-            last_t = max(int(m.get("createdTime", 0)) for m in msgs)
-            chats.append((mid, last_t))
+        chats = [(mid, max(int(m.get("createdTime", 0)) for m in msgs))
+                 for mid, msgs in self._data.items() if msgs]
         chats.sort(key=lambda c: c[1], reverse=True)
         self._order = [c[0] for c in chats]
-
         lv = self.query_one("#chat-list", ListView)
         lv.clear()
         for mid, _ in chats:
-            msgs    = self._data[mid]
-            last    = max(msgs, key=lambda m: int(m.get("createdTime", 0)))
-            name    = self._contacts.get(mid, mid[:14] + "…")
-            unread  = len(self._unread.get(mid, set()))
-            lv.append(ChatItem(mid, name, _preview(last), unread))
+            msgs   = self._data[mid]
+            last   = max(msgs, key=lambda m: int(m.get("createdTime", 0)))
+            label  = self._contacts.get(mid, mid[:14] + "…")
+            unread = len(self._unread.get(mid, set()))
+            lv.append(ChatItem(mid, label, _preview(last), unread))
 
     def _show_messages(self, mid: str) -> None:
         log  = self.query_one("#messages", RichLog)
@@ -288,7 +390,6 @@ class TuiApp(App):
         text    = _preview(m) if ct != 0 else str(m.get("text", ""))
         ts      = _ts(m.get("createdTime", 0))
         is_mine = bool(self._my_mid and m.get("from") == self._my_mid)
-
         if is_mine:
             log.write(Align.right(Text.assemble(
                 (text, "bold green"), "  ", (ts, "dim"))))
