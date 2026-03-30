@@ -189,6 +189,8 @@ class TuiApp(App):
         self._unread:   dict[str, set] = {}
         self._token:    str | None     = None
         self._token_ts: float          = 0.0
+        self._pw                       = None
+        self._browser                  = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -253,6 +255,15 @@ class TuiApp(App):
         if self._connected:
             self.run_worker(self._refresh_chat(mid), name="refresh-pick")
 
+    async def on_unmount(self) -> None:
+        """退出時關閉 Playwright，避免 terminal 凍結。"""
+        if self._browser:
+            try: await self._browser.close()
+            except Exception: pass
+        if self._pw:
+            try: await self._pw.stop()
+            except Exception: pass
+
     # ── 非同步任務 ───────────────────────────────────────────────
 
     async def _get_token(self) -> str:
@@ -269,9 +280,9 @@ class TuiApp(App):
             from playwright.async_api import async_playwright
             from gw_client import CDP_URL, find_ext_page
             from send_api import get_my_info
-            pw = await async_playwright().start()
-            b  = await pw.chromium.connect_over_cdp(CDP_URL)
-            self._page    = find_ext_page(b.contexts[0])
+            self._pw      = await async_playwright().start()
+            self._browser = await self._pw.chromium.connect_over_cdp(CDP_URL)
+            self._page    = find_ext_page(self._browser.contexts[0])
             self._my_mid, _ = await get_my_info(self._page)
             self._connected  = True
             self.sub_title   = "已連線"
