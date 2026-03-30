@@ -504,7 +504,6 @@ class TuiApp(App):
 if __name__ == "__main__":
     import os
     TuiApp().run()
-    # 還原 terminal（textual 的 restore sequence 可能尚未 flush）
     os.system("stty sane")
-    # 跳過 GC/atexit，避免 playwright subprocess transport 卡死
+    _logging.shutdown()   # flush log buffer 後再 exit
     os._exit(0)
