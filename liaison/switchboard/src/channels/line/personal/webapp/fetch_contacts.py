@@ -2,7 +2,12 @@
 # dependencies = ["playwright"]
 # ///
 """
-fetch_contacts.py - 從 LINE GW API 抓取聯絡人顯示名稱，寫入 contacts.json
+fetch_contacts.py - 從 LINE GW API 抓取所有聯絡人與群組顯示名稱，寫入 contacts.json
+
+流程：
+  1. getAllContactIds       → 全部好友 mid 清單
+  2. getContacts(mids)      → 名字（分批，每批 100）
+  3. messages.json C... 鍵  → getGroupsV2 補群組名稱
 
 用法:
   uv run fetch_contacts.py
@@ -17,57 +22,86 @@ sys.path.insert(0, str(ROOT))
 from playwright.async_api import async_playwright
 from gw_client import CDP_URL, find_ext_page, get_access_token, compute_hmac, call_api
 
+_PATH_ALL_IDS  = "/api/talk/thrift/Talk/TalkService/getAllContactIds"
 _PATH_CONTACTS = "/api/talk/thrift/Talk/TalkService/getContacts"
+_PATH_GROUPS   = "/api/talk/thrift/Talk/TalkService/getGroupsV2"
 _CONTACTS_JSON = Path(__file__).parent / "contacts.json"
 _MESSAGES_JSON = ROOT / "messages.json"
+_BATCH         = 100   # getContacts 每批上限
 
 
-def _collect_mids() -> list[str]:
-    """從 messages.json 收集所有 1-on-1 chat mids（U 開頭）。"""
+async def _all_contact_ids(page, token: str) -> list[str]:
+    """呼叫 getAllContactIds，回傳全部好友 mid 清單。"""
+    body_obj = []
+    hmac     = await compute_hmac(page, token, _PATH_ALL_IDS, json.dumps(body_obj))
+    result   = call_api(_PATH_ALL_IDS, body_obj, token, hmac)
+    if result.get("code") != 0:
+        print(f"getAllContactIds 失敗: {result}", flush=True)
+        return []
+    ids = result.get("data") or []
+    print(f"    getAllContactIds → {len(ids)} 筆", flush=True)
+    return [i for i in ids if isinstance(i, str)]
+
+
+async def _fetch_names(page, token: str, mids: list[str]) -> dict[str, str]:
+    """分批呼叫 getContacts，回傳 {mid: displayName}。"""
+    contacts = {}
+    for i in range(0, len(mids), _BATCH):
+        batch    = mids[i:i + _BATCH]
+        body_obj = [batch]
+        hmac     = await compute_hmac(page, token, _PATH_CONTACTS, json.dumps(body_obj))
+        result   = call_api(_PATH_CONTACTS, body_obj, token, hmac)
+        for c in result.get("data") or []:
+            mid  = c.get("mid") or c.get("id") or ""
+            name = (c.get("displayName") or c.get("name") or "").strip()
+            if mid and name:
+                contacts[mid] = name
+    return contacts
+
+
+async def _fetch_group_names(page, token: str, group_ids: list[str]) -> dict[str, str]:
+    """呼叫 getGroupsV2 取群組名稱。"""
+    if not group_ids:
+        return {}
+    body_obj = [group_ids]
+    hmac     = await compute_hmac(page, token, _PATH_GROUPS, json.dumps(body_obj))
+    result   = call_api(_PATH_GROUPS, body_obj, token, hmac)
+    groups = {}
+    for g in result.get("data") or []:
+        mid  = g.get("id") or g.get("mid") or ""
+        name = (g.get("name") or g.get("displayName") or "").strip()
+        if mid and name:
+            groups[mid] = name
+    return groups
+
+
+def _group_ids_from_messages() -> list[str]:
+    """從 messages.json 收集 C... 群組 mid。"""
     if not _MESSAGES_JSON.exists():
         return []
     data = json.loads(_MESSAGES_JSON.read_text())
-    mids = set()
-    for chat_mid in data:
-        if chat_mid.startswith("U"):
-            mids.add(chat_mid)
-        # 也收 from 欄位（對方 mid）
-        for m in data[chat_mid]:
-            frm = m.get("from", "")
-            if frm.startswith("U"):
-                mids.add(frm)
-    return list(mids)
+    return [k for k in data if k.startswith("C")]
 
 
 async def fetch_contacts(page, token: str | None = None) -> dict[str, str]:
-    """回傳 {mid: displayName}。token 可由外部傳入以避免重複 reload。"""
-    mids = _collect_mids()
-    if not mids:
-        print("messages.json 沒有資料", flush=True)
-        return {}
-
+    """回傳 {mid: displayName}（好友 + 群組）。token 可由外部傳入。"""
     if token is None:
-        print(f">>> 取得 token...", flush=True)
+        print(">>> 取得 token...", flush=True)
         token = await get_access_token(page)
 
-    print(f">>> 查詢 {len(mids)} 個聯絡人...", flush=True)
-    # getContacts 接受 mid 列表
-    body_obj = [mids]
-    body_str = json.dumps(body_obj)
-    hmac     = await compute_hmac(page, token, _PATH_CONTACTS, body_str)
-    result   = call_api(_PATH_CONTACTS, body_obj, token, hmac)
+    print(">>> 取得全部好友 ID...", flush=True)
+    all_ids = await _all_contact_ids(page, token)
 
-    if result.get("code") != 0:
-        print(f"getContacts 失敗: {result}", flush=True)
-        return {}
+    print(f">>> 取得 {len(all_ids)} 位好友名稱...", flush=True)
+    contacts = await _fetch_names(page, token, all_ids)
 
-    contacts = {}
-    for c in result.get("data") or []:
-        mid  = c.get("mid") or c.get("id") or ""
-        name = (c.get("displayName") or c.get("name") or "").strip()
-        if mid and name:
-            contacts[mid] = name
+    group_ids = _group_ids_from_messages()
+    if group_ids:
+        print(f">>> 取得 {len(group_ids)} 個群組名稱...", flush=True)
+        groups = await _fetch_group_names(page, token, group_ids)
+        contacts.update(groups)
 
+    print(f"    共取得 {len(contacts)} 筆", flush=True)
     return contacts
 
 
@@ -84,8 +118,8 @@ async def main():
             existing.update(contacts)
             _CONTACTS_JSON.write_text(
                 json.dumps(existing, ensure_ascii=False, indent=2))
-            print(f">>> 已儲存 {len(contacts)} 筆到 {_CONTACTS_JSON}", flush=True)
-            for mid, name in list(contacts.items())[:5]:
+            print(f">>> 已儲存 {len(existing)} 筆到{_CONTACTS_JSON}", flush=True)
+            for mid, name in list(contacts.items())[:8]:
                 print(f"    {mid[:20]}… → {name}")
         else:
             print(">>> 沒有取到任何名稱", flush=True)
