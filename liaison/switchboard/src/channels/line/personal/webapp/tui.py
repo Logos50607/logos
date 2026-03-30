@@ -208,19 +208,23 @@ class TuiApp(App):
     ]
     current_chat: reactive[str | None] = reactive(None)
 
+    _SIDEBAR_PAGE = 30   # 每次載入幾筆
+
     def __init__(self):
         super().__init__()
-        self._data:     dict           = {}
-        self._contacts: dict           = {}
-        self._my_mid:   str | None     = None
-        self._page                     = None
-        self._connected: bool          = False
-        self._order:    list[str]      = []
-        self._unread:   dict[str, set] = {}
-        self._token:    str | None     = None
-        self._token_ts: float          = 0.0
-        self._pw                       = None
-        self._browser                  = None
+        self._data:          dict           = {}
+        self._contacts:      dict           = {}
+        self._my_mid:        str | None     = None
+        self._page                          = None
+        self._connected:     bool           = False
+        self._order:         list[str]      = []
+        self._unread:        dict[str, set] = {}
+        self._token:         str | None     = None
+        self._token_ts:      float          = 0.0
+        self._pw                            = None
+        self._browser                       = None
+        self._sidebar_chats: list           = []   # 完整排序後的 (mid, ts) 清單
+        self._sidebar_shown: int            = 0    # 已顯示幾筆
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -428,21 +432,39 @@ class TuiApp(App):
 
     # ── 渲染 ─────────────────────────────────────────────────────
 
-    _SIDEBAR_MAX = 100   # 側欄最多顯示幾個聊天室
-
     def _rebuild_list(self) -> None:
         chats = [(mid, max(int(m.get("createdTime", 0)) for m in msgs))
                  for mid, msgs in self._data.items() if msgs]
         chats.sort(key=lambda c: c[1], reverse=True)
-        self._order = [c[0] for c in chats]
+        self._order         = [c[0] for c in chats]
+        self._sidebar_chats = chats
+        self._sidebar_shown = 0
         lv = self.query_one("#chat-list", ListView)
         lv.clear()
-        for mid, _ in chats[:self._SIDEBAR_MAX]:
+        self._append_sidebar_page(lv)
+
+    def _append_sidebar_page(self, lv=None) -> None:
+        if lv is None:
+            lv = self.query_one("#chat-list", ListView)
+        start = self._sidebar_shown
+        end   = min(start + self._SIDEBAR_PAGE, len(self._sidebar_chats))
+        for mid, _ in self._sidebar_chats[start:end]:
             msgs   = self._data[mid]
             last   = max(msgs, key=lambda m: int(m.get("createdTime", 0)))
             label  = self._contacts.get(mid, mid[:14] + "…")
             unread = len(self._unread.get(mid, set()))
             lv.append(ChatItem(mid, label, _preview(last), unread))
+        self._sidebar_shown = end
+        remaining = len(self._sidebar_chats) - end
+        if remaining > 0:
+            sentinel = ListItem(Label(f"[dim]↓ 還有 {remaining} 個[/]", markup=True))
+            sentinel._is_sentinel = True
+            lv.append(sentinel)
+
+    def on_list_view_highlighted(self, ev: ListView.Highlighted) -> None:
+        if ev.item and getattr(ev.item, "_is_sentinel", False):
+            ev.item.remove()
+            self._append_sidebar_page()
 
     def _show_messages(self, mid: str) -> None:
         log  = self.query_one("#messages", RichLog)
