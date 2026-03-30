@@ -250,6 +250,8 @@ class TuiApp(App):
     def on_mount(self) -> None:
         self.title     = "LINE Personal"
         self.sub_title = "連線中…"
+        with _LOG.open("a") as f:
+            f.write(f"\n[{datetime.now()}] ── TUI 啟動 ──\n")
         _migrate_legacy()
         self._data     = _load_messages()
         self._contacts = _load_contacts()
@@ -302,6 +304,8 @@ class TuiApp(App):
     def action_quit(self) -> None:
         """直接強制退出，跳過 textual shutdown（worker 可能卡在 playwright evaluate）。"""
         import os
+        with _LOG.open("a") as f:
+            f.write(f"[{datetime.now()}] action_quit called\n")
         os.system("stty sane")
         os._exit(0)
 
@@ -422,8 +426,10 @@ class TuiApp(App):
                 self._rebuild_list()
                 self.notify(f"已載入 {len(friends)} 位好友、{len(groups)} 個群組")
             else:
-                self.notify("聯絡人同步回傳 0 筆（LINE API 無回應或無好友）",
-                            severity="warning")
+                msg = "聯絡人同步回傳 0 筆"
+                self.notify(msg, severity="warning")
+                with _LOG.open("a") as f:
+                    f.write(f"[{datetime.now()}] {msg}\n")
             self.sub_title = "已連線"
         except Exception as e:
             self.sub_title = "已連線"
