@@ -256,13 +256,19 @@ class TuiApp(App):
             self.run_worker(self._refresh_chat(mid), name="refresh-pick")
 
     async def on_unmount(self) -> None:
-        """退出時關閉 Playwright，避免 terminal 凍結。"""
+        """退出時先取消背景 workers，再關閉 Playwright，避免 terminal 凍結。"""
+        import asyncio
+        self.workers.cancel_all()
         if self._browser:
-            try: await self._browser.close()
-            except Exception: pass
+            try:
+                await asyncio.wait_for(self._browser.close(), timeout=3)
+            except Exception:
+                pass
         if self._pw:
-            try: await self._pw.stop()
-            except Exception: pass
+            try:
+                await asyncio.wait_for(self._pw.stop(), timeout=3)
+            except Exception:
+                pass
 
     # ── 非同步任務 ───────────────────────────────────────────────
 
@@ -287,17 +293,23 @@ class TuiApp(App):
             self._connected  = True
             self.sub_title   = "已連線"
             self.notify("已連線到 LINE ✓")
-            self.run_worker(self._sync_contacts(), name="contacts")
+            # 先同步聯絡人名稱，再開始預載（確保名稱已就緒）
+            await self._sync_contacts()
             self.run_worker(self._preload_recent(), name="preload")
         except Exception as e:
             self.notify(f"連線失敗: {e}", severity="error")
 
     async def _preload_recent(self) -> None:
-        """分批載入所有聊天室訊息，標題顯示進度，每 5 筆存一次。"""
+        """取得全部好友+群組 ID，分批載入所有對話，標題顯示進度。"""
         try:
             from fetch_messages import fetch_chat_messages
-            token = await self._get_token()
-            order = list(self._order)   # snapshot，避免 rebuild 期間變動
+            from fetch_contacts import get_all_chat_ids
+            token   = await self._get_token()
+            all_ids = await get_all_chat_ids(self._page, token)
+            # 已有對話的排前面（依最後訊息時間），新 ID 排後面
+            known_t = {mid: max(int(m.get("createdTime", 0)) for m in msgs)
+                       for mid, msgs in self._data.items() if msgs}
+            order = sorted(all_ids, key=lambda m: known_t.get(m, 0), reverse=True)
             total = len(order)
             for i, mid in enumerate(order):
                 self.sub_title = f"載入 {i+1}/{total}…"

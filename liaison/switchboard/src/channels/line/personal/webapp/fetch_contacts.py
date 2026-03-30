@@ -22,12 +22,14 @@ sys.path.insert(0, str(ROOT))
 from playwright.async_api import async_playwright
 from gw_client import CDP_URL, find_ext_page, get_access_token, compute_hmac, call_api
 
-_PATH_ALL_IDS  = "/api/talk/thrift/Talk/TalkService/getAllContactIds"
-_PATH_CONTACTS = "/api/talk/thrift/Talk/TalkService/getContacts"
-_PATH_GROUPS   = "/api/talk/thrift/Talk/TalkService/getGroupsV2"
-_CONTACTS_JSON = Path(__file__).parent / "contacts.json"
-_MESSAGES_JSON = ROOT / "messages.json"
-_BATCH         = 100   # getContacts 每批上限
+_PATH_ALL_IDS      = "/api/talk/thrift/Talk/TalkService/getAllContactIds"
+_PATH_CONTACTS     = "/api/talk/thrift/Talk/TalkService/getContacts"
+_PATH_GROUPS       = "/api/talk/thrift/Talk/TalkService/getGroupsV2"
+_PATH_GROUP_IDS    = "/api/talk/thrift/Talk/TalkService/getGroupIdsJoined"
+_PATH_ROOM_IDS     = "/api/talk/thrift/Talk/TalkService/getRoomIdsJoined"
+_CONTACTS_JSON     = Path(__file__).parent / "contacts.json"
+_MESSAGES_JSON     = ROOT / "messages.json"
+_BATCH             = 100   # getContacts 每批上限
 
 
 async def _all_contact_ids(page, token: str) -> list[str]:
@@ -75,12 +77,43 @@ async def _fetch_group_names(page, token: str, group_ids: list[str]) -> dict[str
     return groups
 
 
+async def _ids_from_path(page, token: str, path: str) -> list[str]:
+    """呼叫回傳 ID 清單的 API，例如 getGroupIdsJoined / getRoomIdsJoined。"""
+    body_obj = []
+    hmac     = await compute_hmac(page, token, path, json.dumps(body_obj))
+    result   = call_api(path, body_obj, token, hmac)
+    ids = result.get("data") or []
+    return [i for i in ids if isinstance(i, str)]
+
+
+async def get_all_chat_ids(page, token: str) -> set[str]:
+    """回傳所有 1-on-1（U）、群組（C）、Room（R）的 mid 集合。"""
+    ids: set[str] = set()
+
+    contacts = await _all_contact_ids(page, token)
+    ids.update(contacts)
+
+    for path in (_PATH_GROUP_IDS, _PATH_ROOM_IDS):
+        try:
+            group_ids = await _ids_from_path(page, token, path)
+            ids.update(group_ids)
+        except Exception:
+            pass
+
+    # 補上 messages.json 現有的（防止漏網之魚）
+    if _MESSAGES_JSON.exists():
+        existing = json.loads(_MESSAGES_JSON.read_text())
+        ids.update(existing.keys())
+
+    return ids
+
+
 def _group_ids_from_messages() -> list[str]:
-    """從 messages.json 收集 C... 群組 mid。"""
+    """從 messages.json 收集 C... 群組 mid（給 fetch_contacts 用）。"""
     if not _MESSAGES_JSON.exists():
         return []
     data = json.loads(_MESSAGES_JSON.read_text())
-    return [k for k in data if k.startswith("C")]
+    return [k for k in data if k.startswith("C") or k.startswith("R")]
 
 
 async def fetch_contacts(page, token: str | None = None) -> dict[str, str]:
@@ -95,7 +128,8 @@ async def fetch_contacts(page, token: str | None = None) -> dict[str, str]:
     print(f">>> 取得 {len(all_ids)} 位好友名稱...", flush=True)
     contacts = await _fetch_names(page, token, all_ids)
 
-    group_ids = _group_ids_from_messages()
+    group_ids = list((await get_all_chat_ids(page, token)) - set(all_ids))
+    group_ids = [m for m in group_ids if m.startswith("C") or m.startswith("R")]
     if group_ids:
         print(f">>> 取得 {len(group_ids)} 個群組名稱...", flush=True)
         groups = await _fetch_group_names(page, token, group_ids)

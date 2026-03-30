@@ -121,9 +121,6 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 PATH=~/.console-ninja/.bin:$PATH
-. "/home/logos/.deno/env"
-export DENO_INSTALL="/home/logos/.deno"
-export PATH="$DENO_INSTALL/bin:$PATH"
 export DENO_INSTALL="$HOME/.deno"
 export PATH="$DENO_INSTALL/bin:$PATH"
 
@@ -140,3 +137,6 @@ export PATH="$PATH:/home/logos/.turso"
 
 # LINE Official Account - 允許讀寫的聊天室白名單（逗號分隔）
 export LINE_OA_CHAT_WHITELIST="Ued0d228b5a360577ceb5f580d9cdf12f"
+
+# LINE Personal TUI
+alias switchboard-tui='cd /data/logos/liaison/switchboard/src/channels/line/personal/webapp && uv run tui.py'
