@@ -346,8 +346,8 @@ class TuiApp(App):
             from fetch_contacts import get_all_chat_ids
             token   = await self._get_token()
             all_ids = await get_all_chat_ids(self._page, token)
-            # 只抓本地沒有訊息的聊天室
-            new_ids = [m for m in all_ids if not self._data.get(m)]
+            # 只抓本地完全沒有記錄的聊天室（空 [] 代表已檢查過，不重抓）
+            new_ids = [m for m in all_ids if m not in self._data]
             total   = len(new_ids)
             if not new_ids:
                 self.sub_title = "已連線"
@@ -356,16 +356,17 @@ class TuiApp(App):
             for i, mid in enumerate(new_ids):
                 self.sub_title = f"初始載入 {i+1}/{total}…"
                 msgs = await fetch_chat_messages(self._page, token, mid, 30)
-                if msgs:
-                    self._data[mid] = msgs
-                    if self.current_chat == mid:
-                        self._show_messages(mid)
+                self._data[mid] = msgs or []   # 空的也存，避免下次重抓
+                if msgs and self.current_chat == mid:
+                    self._show_messages(mid)
                 if i % 10 == 9:
                     _save_messages(self._data)
             _save_messages(self._data)
             self._rebuild_list()
             self.sub_title = "已連線"
-            self.notify(f"新增 {total} 個聊天室 ✓")
+            added = sum(1 for m in new_ids if self._data.get(m))
+            if added:
+                self.notify(f"新增 {added} 個聊天室 ✓")
         except Exception as e:
             self.sub_title = "已連線"
             _log_exc("preload 失敗")
