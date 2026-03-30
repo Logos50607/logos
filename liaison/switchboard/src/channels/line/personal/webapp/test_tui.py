@@ -98,12 +98,17 @@ def test_preview_unknown_type():
 # ── _save_messages / _load_messages ──────────────────────────────
 
 def test_save_and_load(tmp_path, monkeypatch):
+    import time
     fake = tmp_path / "messages.json"
     monkeypatch.setattr("tui._MSGS", fake)
 
     data = {"U123": [{"id": "1", "text": "hi", "createdTime": "1000",
                       "contentType": 0, "from": "U123"}]}
     _save_messages(data)
+    # _save_messages 在背景 thread 寫檔，等待最多 1 秒
+    for _ in range(20):
+        if fake.exists(): break
+        time.sleep(0.05)
     assert fake.exists()
 
     loaded = _load_messages()

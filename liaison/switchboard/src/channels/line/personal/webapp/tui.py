@@ -106,7 +106,10 @@ def _load_messages() -> dict:
     return json.loads(_MSGS.read_text()) if _MSGS.exists() else {}
 
 def _save_messages(data: dict) -> None:
-    _MSGS.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    """背景執行寫檔，避免大型 JSON 擋住 event loop。"""
+    import threading
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    threading.Thread(target=lambda: _MSGS.write_text(content), daemon=True).start()
 
 
 # ── 2. ChatItem ───────────────────────────────────────────────────
@@ -425,6 +428,8 @@ class TuiApp(App):
 
     # ── 渲染 ─────────────────────────────────────────────────────
 
+    _SIDEBAR_MAX = 100   # 側欄最多顯示幾個聊天室
+
     def _rebuild_list(self) -> None:
         chats = [(mid, max(int(m.get("createdTime", 0)) for m in msgs))
                  for mid, msgs in self._data.items() if msgs]
@@ -432,7 +437,7 @@ class TuiApp(App):
         self._order = [c[0] for c in chats]
         lv = self.query_one("#chat-list", ListView)
         lv.clear()
-        for mid, _ in chats:
+        for mid, _ in chats[:self._SIDEBAR_MAX]:
             msgs   = self._data[mid]
             last   = max(msgs, key=lambda m: int(m.get("createdTime", 0)))
             label  = self._contacts.get(mid, mid[:14] + "…")
