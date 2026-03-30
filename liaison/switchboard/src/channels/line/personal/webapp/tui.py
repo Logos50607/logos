@@ -459,20 +459,8 @@ class TuiApp(App):
 
 
 if __name__ == "__main__":
-    import asyncio
-    app = TuiApp()
-    app.run()
-
-    # textual 的 event loop 已結束；在新 loop 裡清理 playwright subprocess，
-    # 避免 GC 在 loop 關閉後清理 transport 造成 terminal 凍結。
-    async def _cleanup():
-        if app._pw:
-            try:
-                await asyncio.wait_for(app._pw.stop(), timeout=3)
-            except Exception:
-                pass
-
-    try:
-        asyncio.run(_cleanup())
-    except Exception:
-        pass
+    import os
+    TuiApp().run()
+    # 連接的是外部 Chrome（CDP），不需要 playwright cleanup。
+    # 直接 os._exit 跳過 GC/atexit，避免 subprocess transport 卡死 terminal。
+    os._exit(0)
