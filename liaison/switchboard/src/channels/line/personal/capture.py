@@ -57,6 +57,10 @@ def attach_listeners(target, on_record, label: str) -> None:
             req_headers = dict(await response.request.all_headers())
         except Exception:
             req_headers = {}
+        try:
+            req_body = _try_decode(response.request.post_data)
+        except Exception:
+            req_body = None
         record = {
             "type": "http", "src": label,
             "ts": time.time(),
@@ -64,6 +68,7 @@ def attach_listeners(target, on_record, label: str) -> None:
             "url": response.url,
             "status": response.status,
             "req_headers": req_headers,
+            "req_body": req_body,
             "body": body,
         }
         await on_record(record)

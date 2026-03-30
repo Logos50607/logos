@@ -49,7 +49,7 @@ async def _fetch_names(page, token: str, mids: list[str]) -> dict[str, str]:
     contacts = {}
     for i in range(0, len(mids), _BATCH):
         batch    = mids[i:i + _BATCH]
-        body_obj = [batch]
+        body_obj = [{"targetUserMids": batch}]
         hmac     = await compute_hmac(page, token, _PATH_CONTACTS, json.dumps(body_obj))
         result   = call_api(_PATH_CONTACTS, body_obj, token, hmac)
         # getContactsV2: data.contacts[mid].contact.displayName

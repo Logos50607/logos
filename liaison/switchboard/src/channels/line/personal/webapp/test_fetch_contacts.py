@@ -61,7 +61,7 @@ def test_fetch_names_basic():
     page = MagicMock()
     mids = ["Uaaaa", "Ubbbb", "Ucccc"]
     with patch("fetch_contacts.compute_hmac", new=AsyncMock(return_value="h")), \
-         patch("fetch_contacts.call_api", side_effect=lambda p,b,t,h: _v2_response(b[0])):
+         patch("fetch_contacts.call_api", side_effect=lambda p,b,t,h: _v2_response(b[0]["targetUserMids"])):
         result = asyncio.run(_fetch_names(page, "tok", mids))
     assert len(result) == 3
     assert result["Uaaaa"] == "Name-aaaa"
@@ -74,8 +74,9 @@ def test_fetch_names_batches():
     mids = [f"U{i:04d}" for i in range(250)]
     calls = []
     def spy_call(path, body, token, hmac):
-        calls.append(len(body[0]))
-        return _v2_response(body[0])
+        batch = body[0]["targetUserMids"]
+        calls.append(len(batch))
+        return _v2_response(batch)
     with patch("fetch_contacts.compute_hmac", new=AsyncMock(return_value="h")), \
          patch("fetch_contacts.call_api", side_effect=spy_call):
         result = asyncio.run(_fetch_names(page, "tok", mids))
