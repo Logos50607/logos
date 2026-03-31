@@ -315,13 +315,22 @@ class TuiApp(App):
 
     def action_quit(self) -> None:
         """直接強制退出，跳過 textual shutdown（worker 可能卡在 playwright evaluate）。"""
-        import os, sys
+        import os, sys, termios, tty
         with _LOG.open("a") as f:
             f.write(f"[{datetime.now()}] action_quit called\n")
-        # 離開 alternate screen buffer、顯示 cursor、重設顏色，再還原 terminal 模式
+        # 離開 alternate screen buffer、顯示 cursor、重設顏色
         sys.stdout.write("\033[?1049l\033[?25h\033[0m\r\n")
         sys.stdout.flush()
-        os.system("stty sane")
+        # 用 termios 直接在 process 內還原 terminal（不 fork）
+        try:
+            fd = sys.stdin.fileno()
+            termios.tcsetattr(fd, termios.TCSANOW, termios.tcgetattr(fd))
+            tty.setcbreak(fd)   # 先 cbreak 再 setraw 會還原到正常
+            attrs = termios.tcgetattr(fd)
+            attrs[3] |= termios.ECHO | termios.ICANON  # 開 echo + canonical
+            termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        except Exception:
+            pass
         os._exit(0)
 
     # ── 非同步任務 ───────────────────────────────────────────────
