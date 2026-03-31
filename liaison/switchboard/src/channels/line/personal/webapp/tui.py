@@ -61,6 +61,7 @@ _CT = {
     14: "📎 檔案",
     15: "📍 位置",
     18: "🔔 系統通知",
+    22: "🤖 Flex Message",
 }
 
 _LOC_KEY = {
@@ -92,6 +93,14 @@ def _preview(m: dict) -> str:
     if ct == 18:
         loc = _meta(m).get("LOC_KEY", "")
         return f"🔔 {_LOC_KEY.get(loc, loc or '系統通知')}"
+    if ct == 22:
+        try:
+            import json as _j
+            flex = _j.loads(_meta(m).get("FLEX_JSON", "{}"))
+            alt = flex.get("altText") or ""
+            return f"🤖 {alt[:35]}" if alt else "🤖 Flex Message"
+        except Exception:
+            return "🤖 Flex Message"
     dur = _meta(m).get("DURATION")
     if dur:      return f"{_CT.get(ct,'?')} ({int(dur)//1000}s)"
     return _CT.get(ct, f"[type {ct}]")
