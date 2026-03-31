@@ -51,6 +51,16 @@ def _log_exc(tag: str) -> None:
         f.write(f"\n[{datetime.now()}] {tag}\n")
         _traceback.print_exc(file=f)
 
+# 不同發話者的文字顏色（依 mid hash 循環）
+_SENDER_PALETTE = [
+    "bright_cyan", "bright_yellow", "bright_magenta",
+    "bright_green", "bright_blue", "orange1",
+    "chartreuse3", "deep_sky_blue1", "hot_pink",
+]
+
+def _sender_style(mid: str) -> str:
+    return _SENDER_PALETTE[hash(mid) % len(_SENDER_PALETTE)]
+
 _CT = {
     0:  "",
     1:  "📷 圖片",
@@ -230,11 +240,12 @@ ChatItem.--highlight { background: $primary-darken-1; }
 class TuiApp(App):
     CSS = CSS
     BINDINGS = [
-        Binding("q",      "quit",       "離開"),
-        Binding("n",      "new_chat",   "新對話"),
-        Binding("r",      "refresh",    "重新整理"),
-        Binding("escape", "focus_list", "聊天清單"),
-        Binding("tab",    "focus_input","輸入框", show=False),
+        Binding("q",      "quit",        "離開"),
+        Binding("n",      "new_chat",    "新對話"),
+        Binding("r",      "refresh",     "重新整理"),
+        Binding("[",      "load_older",  "載入更早"),
+        Binding("escape", "focus_list",  "聊天清單"),
+        Binding("tab",    "focus_input", "輸入框", show=False),
     ]
     current_chat: reactive[str | None] = reactive(None)
 
@@ -255,6 +266,7 @@ class TuiApp(App):
         self._browser                       = None
         self._sidebar_chats: list           = []   # 完整排序後的 (mid, ts) 清單
         self._sidebar_shown: int            = 0    # 已顯示幾筆
+        self._chat_shown:    dict[str, int] = {}   # 各聊天室目前顯示幾則
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -534,25 +546,51 @@ class TuiApp(App):
         log  = self.query_one("#messages", RichLog)
         log.clear()
         name = self._contacts.get(mid, mid[:14] + "…")
-        log.write(f"[bold cyan]── {name} ──[/]\n")
+        n    = self._chat_shown.get(mid, 80)
         msgs = sorted(self._data.get(mid, []),
                       key=lambda m: int(m.get("createdTime", 0)))
-        for m in msgs[-80:]:
+        total = len(msgs)
+        if total > n:
+            log.write(Text(f"[ 按 [ 載入更早的 {total - n} 則 ]", style="dim"))
+        for m in msgs[-n:]:
             self._append_message(m, mid)
+
+    async def action_load_older(self) -> None:
+        mid = self.current_chat
+        if not mid: return
+        msgs = sorted(self._data.get(mid, []), key=lambda m: int(m.get("createdTime", 0)))
+        if not msgs: return
+        if self._connected:
+            from fetch_messages import _get_previous
+            try:
+                token = await self._get_token()
+                prev  = await _get_previous(self._page, token, mid, msgs[0], 30)
+                if prev:
+                    known = {m["id"] for m in self._data[mid]}
+                    new   = [m for m in prev if m["id"] not in known]
+                    if new:
+                        self._data[mid] = new + self._data[mid]
+                        _save_messages(self._data)
+            except Exception:
+                _log_exc("load_older 失敗")
+        self._chat_shown[mid] = self._chat_shown.get(mid, 80) + 30
+        self._show_messages(mid)
 
     def _append_message(self, m: dict, chat_mid: str) -> None:
         log     = self.query_one("#messages", RichLog)
         ct      = int(m.get("contentType", 0))
         text    = _preview(m) if ct != 0 else str(m.get("text", ""))
         ts      = _ts(m.get("createdTime", 0))
-        is_mine = bool(self._my_mid and m.get("from") == self._my_mid)
+        sender_mid = m.get("from", "")
+        is_mine = bool(self._my_mid and sender_mid == self._my_mid)
         if is_mine:
             log.write(Align.right(Text.assemble(
                 (text, "bold green"), "  ", (ts, "dim"))))
         else:
-            sender = self._contacts.get(m.get("from", ""), "")
-            prefix = Text(f"{sender} ", style="cyan bold") if sender else Text("")
-            log.write(Text.assemble(prefix, (text, "white"), "  ", (ts, "dim")))
+            color  = _sender_style(sender_mid)
+            sender = self._contacts.get(sender_mid, "")
+            prefix = Text(f"{sender} ", style=f"bold {color}") if sender else Text("")
+            log.write(Text.assemble(prefix, (text, color), "  ", (ts, "dim")))
 
 
 if __name__ == "__main__":
