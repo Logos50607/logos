@@ -9,6 +9,7 @@ tui.py - LINE 個人帳號 Terminal UI
   ↑↓       切換聊天室          n    新對話（聯絡人/群組）
   Enter    開啟聊天            r    重新整理
   Tab      聊天清單 ↔ 輸入框   q    離開
+  m        對話區（可上下捲）  [    載入更早訊息
   Escape   回聊天清單 / 關閉
 """
 
@@ -240,12 +241,13 @@ ChatItem.--highlight { background: $primary-darken-1; }
 class TuiApp(App):
     CSS = CSS
     BINDINGS = [
-        Binding("q",      "quit",        "離開"),
-        Binding("n",      "new_chat",    "新對話"),
-        Binding("r",      "refresh",     "重新整理"),
-        Binding("[",      "load_older",  "載入更早"),
-        Binding("escape", "focus_list",  "聊天清單"),
-        Binding("tab",    "focus_input", "輸入框", show=False),
+        Binding("q",      "quit",          "離開"),
+        Binding("n",      "new_chat",      "新對話"),
+        Binding("r",      "refresh",       "重新整理"),
+        Binding("[",      "load_older",    "載入更早"),
+        Binding("m",      "focus_messages","對話區"),
+        Binding("escape", "focus_list",    "聊天清單"),
+        Binding("tab",    "focus_input",   "輸入框", show=False),
     ]
     current_chat: reactive[str | None] = reactive(None)
 
@@ -275,7 +277,7 @@ class TuiApp(App):
                 yield Label("[b] 聊天室[/]", markup=True)
                 yield ListView(id="chat-list")
             with Vertical(id="main"):
-                yield RichLog(id="messages", highlight=True, markup=True, wrap=True)
+                yield RichLog(id="messages", highlight=True, markup=True, wrap=True, can_focus=True)
                 with Horizontal(id="input-row"):
                     yield Input(placeholder="輸入訊息… [Enter 送出]", id="input")
         yield Footer()
@@ -311,8 +313,9 @@ class TuiApp(App):
             self.notify("尚未連線，請稍候", severity="warning"); return
         self.run_worker(self._send(self.current_chat, text), name="send")
 
-    def action_focus_list(self)  -> None: self.query_one("#chat-list").focus()
-    def action_focus_input(self) -> None: self.query_one("#input").focus()
+    def action_focus_list(self)     -> None: self.query_one("#chat-list").focus()
+    def action_focus_input(self)    -> None: self.query_one("#input").focus()
+    def action_focus_messages(self) -> None: self.query_one("#messages").focus()
 
     def action_refresh(self) -> None:
         if self.current_chat:
@@ -577,20 +580,26 @@ class TuiApp(App):
         self._show_messages(mid)
 
     def _append_message(self, m: dict, chat_mid: str) -> None:
-        log     = self.query_one("#messages", RichLog)
-        ct      = int(m.get("contentType", 0))
-        text    = _preview(m) if ct != 0 else str(m.get("text", ""))
-        ts      = _ts(m.get("createdTime", 0))
+        log        = self.query_one("#messages", RichLog)
+        ct         = int(m.get("contentType", 0))
+        text       = _preview(m) if ct != 0 else str(m.get("text", ""))
+        ts         = _ts(m.get("createdTime", 0))
         sender_mid = m.get("from", "")
-        is_mine = bool(self._my_mid and sender_mid == self._my_mid)
+        is_mine    = bool(self._my_mid and sender_mid == self._my_mid)
+
         if is_mine:
-            log.write(Align.right(Text.assemble(
-                (text, "bold green"), "  ", (ts, "dim"))))
+            bubble = Text.assemble((" ", ""), (f" {text} ", "black on green"), (" ", ""), ("  ", ""), (ts, "dim"))
+            log.write(Align.right(bubble))
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, "")
-            prefix = Text(f"{sender} ", style=f"bold {color}") if sender else Text("")
-            log.write(Text.assemble(prefix, (text, color), "  ", (ts, "dim")))
+            bg     = f"black on {color}"
+            parts  = []
+            if sender:
+                parts.append((f" {sender} ", f"bold {bg}"))
+                parts.append(("\n", ""))
+            parts += [(" ", ""), (f" {text} ", bg), (" ", ""), ("  ", ""), (ts, "dim")]
+            log.write(Text.assemble(*parts))
 
 
 if __name__ == "__main__":
