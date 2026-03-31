@@ -314,28 +314,26 @@ class TuiApp(App):
             self.run_worker(self._refresh_chat(mid), name="refresh-pick")
 
     def action_quit(self) -> None:
-        """直接強制退出，跳過 textual shutdown（worker 可能卡在 playwright evaluate）。"""
-        import os, sys, termios
-        def _log(msg):
-            with _LOG.open("a") as f:
-                f.write(f"[{datetime.now()}] {msg}\n")
-        _log("action_quit: start")
+        """直接強制退出，kill 整個 process group（Python + uv 同時死，shell 立刻拿回 terminal）。"""
+        import os, signal, termios
+        with _LOG.open("a") as f:
+            f.write(f"[{datetime.now()}] action_quit called\n")
+        # 先送 escape sequence 還原 terminal 顯示
         try:
             os.write(1, b"\033[?1049l\033[?25h\033[0m\r\n")
-            _log("action_quit: escape sent")
-        except Exception as e:
-            _log(f"action_quit: escape err {e}")
+        except Exception:
+            pass
+        # 還原 termios（echo + canonical mode）
         try:
             fd = os.open("/dev/tty", os.O_RDWR)
             attrs = termios.tcgetattr(fd)
             attrs[3] |= termios.ECHO | termios.ICANON
             termios.tcsetattr(fd, termios.TCSANOW, attrs)
             os.close(fd)
-            _log("action_quit: termios restored")
-        except Exception as e:
-            _log(f"action_quit: termios err {e}")
-        _log("action_quit: calling _exit")
-        os._exit(0)
+        except Exception:
+            pass
+        # Kill 整個 process group（含 uv），shell 立刻拿回 terminal
+        os.killpg(os.getpgrp(), signal.SIGKILL)
 
     # ── 非同步任務 ───────────────────────────────────────────────
 
