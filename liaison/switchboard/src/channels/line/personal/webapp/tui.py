@@ -269,7 +269,7 @@ class TuiApp(App):
         self._contacts = _load_contacts()
         self._rebuild_list()
         self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
-        self.set_interval(30, self._poll)
+        self.set_interval(10, self._poll)
 
     # ── 事件處理 ─────────────────────────────────────────────────
 
@@ -410,14 +410,14 @@ class TuiApp(App):
             token = await self._get_token()
             boxes = await fetch_message_boxes(self._page, token, last_msgs=1)
 
-            # 找出 deliveredTime 比本地最新訊息還新的聊天室
+            # 找出 lastDeliveredMessageId 比本地最新訊息 id 還新的聊天室
             changed = False
             for box in boxes:
                 mid = box["id"]
-                box_ts = int(box.get("lastDeliveredMessageId", {}).get("deliveredTime") or 0)
-                local_msgs = self._data.get(mid, [])
-                local_ts = max((int(m.get("createdTime", 0)) for m in local_msgs), default=0)
-                if box_ts <= local_ts:
+                box_last_id = (box.get("lastDeliveredMessageId") or {}).get("messageId")
+                local_msgs  = self._data.get(mid, [])
+                local_ids   = {m["id"] for m in local_msgs}
+                if not box_last_id or box_last_id in local_ids:
                     continue
                 known = {m["id"] for m in local_msgs}
                 fresh = await fetch_chat_messages(self._page, token, mid, 10)
