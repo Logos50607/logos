@@ -24,7 +24,6 @@ from gw_client import CDP_URL, find_ext_page, get_access_token, compute_hmac, ca
 
 _PATH_ALL_IDS      = "/api/talk/thrift/Talk/TalkService/getAllContactIds"
 _PATH_CONTACTS     = "/api/talk/thrift/Talk/TalkService/getContactsV2"
-_PATH_GROUPS       = "/api/talk/thrift/Talk/TalkService/getGroupsV2"
 _PATH_CHAT_MIDS    = "/api/talk/thrift/Talk/TalkService/getAllChatMids"
 _DATA_DIR          = ROOT / "data"
 _CONTACTS_JSON     = _DATA_DIR / "friends.json"   # 獨立執行 fetch_contacts.py 時的輸出
@@ -61,16 +60,17 @@ async def _fetch_names(page, token: str, mids: list[str]) -> dict[str, str]:
 
 
 async def _fetch_group_names(page, token: str, group_ids: list[str]) -> dict[str, str]:
-    """呼叫 getGroupsV2 取群組名稱。"""
+    """呼叫 getChats 取群組/聊天室名稱。"""
     if not group_ids:
         return {}
-    body_obj = [group_ids]
-    hmac     = await compute_hmac(page, token, _PATH_GROUPS, json.dumps(body_obj))
-    result   = call_api(_PATH_GROUPS, body_obj, token, hmac)
+    path     = "/api/talk/thrift/Talk/TalkService/getChats"
+    body_obj = [{"chatMids": group_ids}]
+    hmac     = await compute_hmac(page, token, path, json.dumps(body_obj))
+    result   = call_api(path, body_obj, token, hmac)
     groups = {}
-    for g in result.get("data") or []:
-        mid  = g.get("id") or g.get("mid") or ""
-        name = (g.get("name") or g.get("displayName") or "").strip()
+    for g in (result.get("data") or {}).get("chats", []):
+        mid  = g.get("chatMid") or ""
+        name = (g.get("chatName") or "").strip()
         if mid and name:
             groups[mid] = name
     return groups

@@ -110,10 +110,10 @@ def test_fetch_group_names_parses_name():
     import asyncio
     page = MagicMock()
     def api(path, body, token, hmac):
-        return {"code": 0, "data": [
-            {"id": "Cgrp1", "name": "工作群"},
-            {"id": "Cgrp2", "name": "家族"},
-        ]}
+        return {"code": 0, "data": {"chats": [
+            {"chatMid": "Cgrp1", "chatName": "工作群"},
+            {"chatMid": "Cgrp2", "chatName": "家族"},
+        ]}}
     with patch("fetch_contacts.compute_hmac", new=AsyncMock(return_value="h")), \
          patch("fetch_contacts.call_api", side_effect=api):
         result = asyncio.run(_fetch_group_names(page, "tok", ["Cgrp1", "Cgrp2"]))
