@@ -60,6 +60,15 @@ _CT = {
     13: "📇 聯絡人名片",
     14: "📎 檔案",
     15: "📍 位置",
+    18: "🔔 系統通知",
+}
+
+_LOC_KEY = {
+    "C_MI": "加入群組",
+    "C_ML": "離開群組",
+    "C_PN": "釘選訊息",
+    "C_MK": "踢出成員",
+    "C_NC": "群組改名",
 }
 
 
@@ -80,6 +89,9 @@ def _preview(m: dict) -> str:
     ct = int(m.get("contentType", 0))
     if ct == 0:  return str(m.get("text", ""))[:40]
     if ct == 14: return f"📎 {_meta(m).get('FILE_NAME', '檔案')}"
+    if ct == 18:
+        loc = _meta(m).get("LOC_KEY", "")
+        return f"🔔 {_LOC_KEY.get(loc, loc or '系統通知')}"
     dur = _meta(m).get("DURATION")
     if dur:      return f"{_CT.get(ct,'?')} ({int(dur)//1000}s)"
     return _CT.get(ct, f"[type {ct}]")
