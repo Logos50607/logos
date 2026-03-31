@@ -315,22 +315,26 @@ class TuiApp(App):
 
     def action_quit(self) -> None:
         """直接強制退出，跳過 textual shutdown（worker 可能卡在 playwright evaluate）。"""
-        import os, sys, termios, tty
-        with _LOG.open("a") as f:
-            f.write(f"[{datetime.now()}] action_quit called\n")
-        # 離開 alternate screen buffer、顯示 cursor、重設顏色
-        sys.stdout.write("\033[?1049l\033[?25h\033[0m\r\n")
-        sys.stdout.flush()
-        # 用 termios 直接在 process 內還原 terminal（不 fork）
+        import os, sys, termios
+        def _log(msg):
+            with _LOG.open("a") as f:
+                f.write(f"[{datetime.now()}] {msg}\n")
+        _log("action_quit: start")
         try:
-            fd = sys.stdin.fileno()
-            termios.tcsetattr(fd, termios.TCSANOW, termios.tcgetattr(fd))
-            tty.setcbreak(fd)   # 先 cbreak 再 setraw 會還原到正常
+            os.write(1, b"\033[?1049l\033[?25h\033[0m\r\n")
+            _log("action_quit: escape sent")
+        except Exception as e:
+            _log(f"action_quit: escape err {e}")
+        try:
+            fd = os.open("/dev/tty", os.O_RDWR)
             attrs = termios.tcgetattr(fd)
-            attrs[3] |= termios.ECHO | termios.ICANON  # 開 echo + canonical
+            attrs[3] |= termios.ECHO | termios.ICANON
             termios.tcsetattr(fd, termios.TCSANOW, attrs)
-        except Exception:
-            pass
+            os.close(fd)
+            _log("action_quit: termios restored")
+        except Exception as e:
+            _log(f"action_quit: termios err {e}")
+        _log("action_quit: calling _exit")
         os._exit(0)
 
     # ── 非同步任務 ───────────────────────────────────────────────
