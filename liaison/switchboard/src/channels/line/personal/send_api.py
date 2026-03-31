@@ -88,19 +88,25 @@ async def get_recipient_key(page, token: str, recipient_mid: str) -> tuple[int, 
 
 async def _do_send(page, to: str, text: str, token: str,
                    my_mid: str, sender_key_id: int,
-                   receiver_key_id: int, receiver_pub_b64: str) -> dict:
+                   receiver_key_id: int, receiver_pub_b64: str,
+                   reply_to_id: str | None = None) -> dict:
     """用給定的 key 加密並呼叫 sendMessage，回傳原始 API 結果。"""
     seq_num = int(time.time() * 1000) & 0x7FFFFFFF
     chunks  = await encrypt_message(page, to, my_mid,
                                     sender_key_id, receiver_key_id,
                                     receiver_pub_b64, seq_num,
                                     json.dumps({'text': text}))
-    body_obj = [seq_num, {
+    msg = {
         "from": my_mid, "to": to, "toType": 0,
         "id": f"local-{seq_num}", "contentType": 0,
         "contentMetadata": {"e2eeVersion": "2"},
         "hasContent": False, "chunks": chunks,
-    }]
+    }
+    if reply_to_id:
+        msg["relatedMessageId"]      = reply_to_id
+        msg["messageRelationType"]   = 3
+        msg["relatedMessageServiceCode"] = 1
+    body_obj = [seq_num, msg]
     body_str = json.dumps(body_obj)
     hmac = await compute_hmac(page, token, _PATH_SEND, body_str)
     result = call_api(_PATH_SEND, body_obj, token, hmac)
@@ -109,7 +115,8 @@ async def _do_send(page, to: str, text: str, token: str,
 
 # ── 4. 帶重試的完整流程 ───────────────────────────────────────────
 
-async def send_e2ee_text(page, to: str, text: str) -> dict:
+async def send_e2ee_text(page, to: str, text: str,
+                         reply_to_id: str | None = None) -> dict:
     """發送 E2EE V2 訊息；遇 key 過期自動重取重試（最多 2 次）。"""
     print(">>> 取得 token...", flush=True)
     token = await get_access_token(page)
@@ -126,7 +133,8 @@ async def send_e2ee_text(page, to: str, text: str) -> dict:
         print(f">>> 加密並發送（attempt {attempt+1}）...", flush=True)
         result = await _do_send(page, to, text, token,
                                 my_mid, sender_key_id,
-                                receiver_key_id, receiver_pub_b64)
+                                receiver_key_id, receiver_pub_b64,
+                                reply_to_id=reply_to_id)
         code = result.get('code', -1)
         seq  = result.get('_seq')
 
@@ -146,7 +154,23 @@ async def send_e2ee_text(page, to: str, text: str) -> dict:
     return {'error': '重試 3 次仍失敗'}
 
 
-# ── 5. 主程式 ─────────────────────────────────────────────────────
+# ── 5. 收回訊息 ───────────────────────────────────────────────────
+
+_PATH_UNSEND = "/api/talk/thrift/Talk/TalkService/unsendMessage"
+
+async def unsend_message(page, msg_id: str) -> dict:
+    """收回（撤回）已發送的訊息。"""
+    token = await get_access_token(page)
+    body_obj = [{"messageId": msg_id}]
+    body_str = json.dumps(body_obj)
+    hmac = await compute_hmac(page, token, _PATH_UNSEND, body_str)
+    result = call_api(_PATH_UNSEND, body_obj, token, hmac)
+    if result.get("code") == 0:
+        return {"ok": True}
+    return {"error": f"unsendMessage code={result.get('code')}: {result}"}
+
+
+# ── 6. 主程式 ─────────────────────────────────────────────────────
 
 async def main():
     p = argparse.ArgumentParser(description="Send LINE message via GW API (E2EE V2)")

@@ -7,19 +7,20 @@ tui.py - LINE 個人帳號 Terminal UI
 用法: uv run tui.py
 操作:
   ↑↓       切換聊天室          n    新對話（聯絡人/群組）
-  Enter    開啟聊天            r    重新整理
+  Enter    開啟聊天 / 選擇回覆  r    重新整理
   Tab      聊天清單 ↔ 輸入框   q    離開
   m        對話區（可上下捲）  [    載入更早訊息
-  Escape   回聊天清單 / 關閉
+  d        收回自己的訊息      Escape  取消回覆 / 回清單
 """
 
 # 目錄:
 # 1. 常數 & 輔助函式
-# 2. ChatItem widget
-# 3. ContactPickerScreen modal
-# 4. TuiApp：compose / on_mount / 事件處理
-# 5. TuiApp：非同步任務 (cdp / preload / send / poll / contacts / refresh)
-# 6. TuiApp：渲染 (rebuild_list / show_messages / append_message)
+# 2. MessageItem widget（對話氣泡，可選取回覆 / 收回）
+# 3. ChatItem widget
+# 4. ContactPickerScreen modal
+# 5. TuiApp：compose / on_mount / 事件處理
+# 6. TuiApp：非同步任務 (cdp / preload / send / poll / contacts / refresh / unsend)
+# 7. TuiApp：渲染 (rebuild_list / show_messages / append_message)
 
 import ast, json, sys, time
 from datetime import datetime
@@ -32,7 +33,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, RichLog
+from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Static
 
 ROOT   = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -153,7 +154,49 @@ def _save_messages(data: dict) -> None:
     threading.Thread(target=lambda: _MSGS.write_text(content), daemon=True).start()
 
 
-# ── 2. ChatItem ───────────────────────────────────────────────────
+# ── 2. MessageItem ────────────────────────────────────────────────
+
+class MessageItem(ListItem):
+    """對話氣泡：可選取（Enter 回覆，d 收回自己的）。"""
+
+    def __init__(self, msg: dict, my_mid: str | None, contacts: dict):
+        super().__init__()
+        self._msg      = msg
+        self._my_mid   = my_mid
+        self._contacts = contacts
+
+    @property
+    def msg_id(self) -> str:
+        return self._msg.get("id", "")
+
+    @property
+    def is_mine(self) -> bool:
+        return bool(self._my_mid and self._msg.get("from") == self._my_mid)
+
+    def compose(self) -> ComposeResult:
+        ct         = int(self._msg.get("contentType", 0))
+        text       = _preview(self._msg) if ct != 0 else str(self._msg.get("text", ""))
+        ts         = _ts(self._msg.get("createdTime", 0))
+        sender_mid = self._msg.get("from", "")
+        if self.is_mine:
+            bubble = Text.assemble(
+                (" ", ""), (f" {text} ", "black on green"),
+                (" ", ""), ("  ", ""), (ts, "dim"),
+            )
+            yield Static(Align.right(bubble))
+        else:
+            color  = _sender_style(sender_mid)
+            sender = self._contacts.get(sender_mid, "")
+            bg     = f"black on {color}"
+            parts: list = []
+            if sender:
+                parts.append((f" {sender} ", f"bold {bg}"))
+                parts.append(("\n", ""))
+            parts += [(" ", ""), (f" {text} ", bg), (" ", ""), ("  ", ""), (ts, "dim")]
+            yield Static(Text.assemble(*parts))
+
+
+# ── 3. ChatItem ───────────────────────────────────────────────────
 
 class ChatItem(ListItem):
     def __init__(self, mid: str, label: str, preview: str, unread: int = 0):
@@ -231,11 +274,14 @@ Screen { layout: vertical; }
 #body  { height: 1fr; }
 #sidebar { width: 26; border-right: solid $primary-darken-2; }
 #sidebar Label { padding: 0 1; }
-#messages { height: 1fr; padding: 0 1; }
+#messages { height: 1fr; }
+#reply-bar { height: 1; background: $primary-darken-2; padding: 0 1; display: none; }
 #input-row { height: 3; dock: bottom; }
 #input { width: 1fr; }
 ChatItem { height: 4; padding: 0 1; }
 ChatItem.--highlight { background: $primary-darken-1; }
+MessageItem { height: auto; padding: 0 1; }
+MessageItem > Static { width: 1fr; }
 """
 
 class TuiApp(App):
@@ -246,6 +292,7 @@ class TuiApp(App):
         Binding("r",      "refresh",       "重新整理"),
         Binding("[",      "load_older",    "載入更早"),
         Binding("m",      "focus_messages","對話區"),
+        Binding("d",      "unsend",        "收回", show=False),
         Binding("escape", "focus_list",    "聊天清單"),
         Binding("tab",    "focus_input",   "輸入框", show=False),
     ]
@@ -269,6 +316,7 @@ class TuiApp(App):
         self._sidebar_chats: list           = []   # 完整排序後的 (mid, ts) 清單
         self._sidebar_shown: int            = 0    # 已顯示幾筆
         self._chat_shown:    dict[str, int] = {}   # 各聊天室目前顯示幾則
+        self._reply_to:      dict | None    = None  # 目前選取要回覆的訊息
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -277,7 +325,8 @@ class TuiApp(App):
                 yield Label("[b] 聊天室[/]", markup=True)
                 yield ListView(id="chat-list")
             with Vertical(id="main"):
-                yield RichLog(id="messages", highlight=True, markup=True, wrap=True, can_focus=True)
+                yield ListView(id="messages")
+                yield Label("", id="reply-bar", markup=False)
                 with Horizontal(id="input-row"):
                     yield Input(placeholder="輸入訊息… [Enter 送出]", id="input")
         yield Footer()
@@ -303,6 +352,13 @@ class TuiApp(App):
             self._unread.pop(item.mid, None)
             self._show_messages(item.mid)
             self.query_one("#input", Input).focus()
+        elif isinstance(item, MessageItem):
+            self._reply_to = item._msg
+            preview = str(item._msg.get("text", _preview(item._msg)))[:50]
+            bar = self.query_one("#reply-bar", Label)
+            bar.update(f"↩ 回覆: {preview}")
+            bar.display = True
+            self.query_one("#input", Input).focus()
 
     async def on_input_submitted(self, ev: Input.Submitted) -> None:
         text = ev.value.strip()
@@ -313,7 +369,15 @@ class TuiApp(App):
             self.notify("尚未連線，請稍候", severity="warning"); return
         self.run_worker(self._send(self.current_chat, text), name="send")
 
-    def action_focus_list(self)     -> None: self.query_one("#chat-list").focus()
+    def action_focus_list(self) -> None:
+        if self._reply_to is not None:
+            self._reply_to = None
+            bar = self.query_one("#reply-bar", Label)
+            bar.update("")
+            bar.display = False
+            self.query_one("#input", Input).focus()
+        else:
+            self.query_one("#chat-list").focus()
     def action_focus_input(self)    -> None: self.query_one("#input").focus()
     def action_focus_messages(self) -> None: self.query_one("#messages").focus()
 
@@ -421,12 +485,21 @@ class TuiApp(App):
 
     async def _send(self, mid: str, text: str) -> None:
         from send_api import send_e2ee_text
-        result = await send_e2ee_text(self._page, mid, text)
+        reply_id = self._reply_to["id"] if self._reply_to else None
+        result   = await send_e2ee_text(self._page, mid, text, reply_to_id=reply_id)
         if result.get("ok"):
-            msg = {"from": self._my_mid or "", "to": mid,
-                   "contentType": 0, "text": text,
-                   "createdTime": str(int(time.time() * 1000)),
-                   "id": f"local-{result['seq']}"}
+            msg: dict = {"from": self._my_mid or "", "to": mid,
+                         "contentType": 0, "text": text,
+                         "createdTime": str(int(time.time() * 1000)),
+                         "id": f"local-{result['seq']}"}
+            if reply_id:
+                msg["relatedMessageId"]    = reply_id
+                msg["messageRelationType"] = 3
+            # 清除回覆狀態
+            self._reply_to = None
+            bar = self.query_one("#reply-bar", Label)
+            bar.update("")
+            bar.display = False
             self._data.setdefault(mid, []).append(msg)
             _save_messages(self._data)
             if self.current_chat == mid:
@@ -509,6 +582,36 @@ class TuiApp(App):
         except Exception as e:
             self.notify(f"重新整理失敗: {e}", severity="error")
 
+    def action_unsend(self) -> None:
+        if not self._connected or not self.current_chat:
+            return
+        lv   = self.query_one("#messages", ListView)
+        item = lv.highlighted_child
+        if not isinstance(item, MessageItem):
+            self.notify("請先在對話區選擇訊息（按 m 進入）", severity="warning")
+            return
+        if not item.is_mine:
+            self.notify("只能收回自己的訊息", severity="warning")
+            return
+        self.run_worker(self._do_unsend(item.msg_id), name="unsend")
+
+    async def _do_unsend(self, msg_id: str) -> None:
+        try:
+            from send_api import unsend_message
+            result = await unsend_message(self._page, msg_id)
+            if result.get("ok"):
+                mid = self.current_chat
+                self._data[mid] = [m for m in self._data.get(mid, [])
+                                   if m.get("id") != msg_id]
+                _save_messages(self._data)
+                self._show_messages(mid)
+                self.notify("已收回訊息")
+            else:
+                self.notify(f"收回失敗: {result.get('error')}", severity="error")
+        except Exception as e:
+            self.notify(f"收回失敗: {e}", severity="error")
+            _log_exc("unsend 失敗")
+
     # ── 渲染 ─────────────────────────────────────────────────────
 
     def _rebuild_list(self) -> None:
@@ -546,17 +649,19 @@ class TuiApp(App):
             self._append_sidebar_page()
 
     def _show_messages(self, mid: str) -> None:
-        log  = self.query_one("#messages", RichLog)
-        log.clear()
-        name = self._contacts.get(mid, mid[:14] + "…")
+        lv   = self.query_one("#messages", ListView)
+        lv.clear()
         n    = self._chat_shown.get(mid, 80)
         msgs = sorted(self._data.get(mid, []),
                       key=lambda m: int(m.get("createdTime", 0)))
         total = len(msgs)
         if total > n:
-            log.write(Text(f"[ 按 [ 載入更早的 {total - n} 則 ]", style="dim"))
+            hint = ListItem(Label(f"[ 按 [ 載入更早的 {total - n} 則 ]", markup=False))
+            hint._is_hint = True
+            lv.append(hint)
         for m in msgs[-n:]:
-            self._append_message(m, mid)
+            lv.append(MessageItem(m, self._my_mid, self._contacts))
+        lv.scroll_end(animate=False)
 
     async def action_load_older(self) -> None:
         mid = self.current_chat
@@ -580,26 +685,9 @@ class TuiApp(App):
         self._show_messages(mid)
 
     def _append_message(self, m: dict, chat_mid: str) -> None:
-        log        = self.query_one("#messages", RichLog)
-        ct         = int(m.get("contentType", 0))
-        text       = _preview(m) if ct != 0 else str(m.get("text", ""))
-        ts         = _ts(m.get("createdTime", 0))
-        sender_mid = m.get("from", "")
-        is_mine    = bool(self._my_mid and sender_mid == self._my_mid)
-
-        if is_mine:
-            bubble = Text.assemble((" ", ""), (f" {text} ", "black on green"), (" ", ""), ("  ", ""), (ts, "dim"))
-            log.write(Align.right(bubble))
-        else:
-            color  = _sender_style(sender_mid)
-            sender = self._contacts.get(sender_mid, "")
-            bg     = f"black on {color}"
-            parts  = []
-            if sender:
-                parts.append((f" {sender} ", f"bold {bg}"))
-                parts.append(("\n", ""))
-            parts += [(" ", ""), (f" {text} ", bg), (" ", ""), ("  ", ""), (ts, "dim")]
-            log.write(Text.assemble(*parts))
+        lv = self.query_one("#messages", ListView)
+        lv.append(MessageItem(m, self._my_mid, self._contacts))
+        lv.scroll_end(animate=False)
 
 
 if __name__ == "__main__":
