@@ -64,6 +64,22 @@ _SENDER_PALETTE = [
 def _sender_style(mid: str) -> str:
     return _SENDER_PALETTE[hash(mid) % len(_SENDER_PALETTE)]
 
+# Rich 顏色名 → Textual CSS 相容顏色（styles.background 使用）
+_RICH_TO_CSS: dict[str, str] = {
+    "bright_cyan":    "ansi_bright_cyan",
+    "bright_yellow":  "ansi_bright_yellow",
+    "bright_magenta": "ansi_bright_magenta",
+    "bright_green":   "ansi_bright_green",
+    "bright_blue":    "ansi_bright_blue",
+    "orange1":        "#ff8700",
+    "chartreuse3":    "#5faf00",
+    "deep_sky_blue1": "#00afff",
+    "hot_pink":       "#ff69b4",
+}
+
+def _css_color(rich_name: str) -> str:
+    return _RICH_TO_CSS.get(rich_name, rich_name)
+
 _CT = {
     0:  "",
     1:  "📷 圖片",
@@ -201,13 +217,14 @@ class MessageItem(ListItem):
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, "")
             # 用 CSS styles.background 填滿整行寬（Rich Text 背景只蓋文字寬度）
+            css_bg = _css_color(color)
             if sender:
                 name_s = Static(Text(f" {sender}", style="bold"))
-                name_s.styles.background = color
+                name_s.styles.background = css_bg
                 name_s.styles.color = "black"
                 yield name_s
             text_s = Static(Text.assemble((f" {text}  ", ""), (ts, "dim")))
-            text_s.styles.background = color
+            text_s.styles.background = css_bg
             text_s.styles.color = "black"
             yield text_s
 
