@@ -159,32 +159,48 @@ async def send_e2ee_text(page, to: str, text: str,
 
 async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
                                 ltsm_cache: dict, chan_cache: dict,
-                                pub_cache: dict) -> str | None:
+                                pub_cache: dict, debug_log=None) -> str | None:
     """
     解密單則收到的 E2EE V2 訊息，回傳明文 text 或 None。
 
     ltsm_cache: {receiver_key_id: my_ltsm_key_id}  ← 跨訊息共用，避免重複掃描
     chan_cache:  {(my_ltsm_id, sender_mid): channel_ltsm_id}
     pub_cache:   {sender_mid: sender_pub_b64}
+    debug_log:   Path → 只有第一則訊息傳入，逐步記錄失敗原因
     """
+    import base64, struct
+    from datetime import datetime as _dt
+
+    def _dlog(msg_str):
+        if debug_log:
+            with open(debug_log, "a") as _f:
+                _f.write(f"  [{_dt.now().strftime('%H:%M:%S')}] {msg_str}\n")
+
     chunks = msg.get("chunks")
     if not chunks or len(chunks) < 5:
+        _dlog(f"skip: chunks={type(chunks)} len={len(chunks) if chunks else 0}")
         return None
     sender_mid = msg.get("from", "")
     if not sender_mid or sender_mid == my_mid:
-        return None  # 自己傳的已有 text，不需解密
-
-    import base64, struct
-    try:
-        r_key_id = struct.unpack_from('<I', base64.b64decode(chunks[4])[:4])[0]
-    except Exception:
+        _dlog(f"skip: sender={sender_mid[:12]}")
         return None
+
+    try:
+        r_key_id_le = struct.unpack_from('<I', base64.b64decode(chunks[4])[:4])[0]
+        r_key_id_be = struct.unpack_from('>I', base64.b64decode(chunks[4])[:4])[0]
+        _dlog(f"chunks[4] r_key_id LE={r_key_id_le} BE={r_key_id_be} | my_mid senderKeyId needed")
+    except Exception as e:
+        _dlog(f"parse r_key_id 失敗: {e}")
+        return None
+    r_key_id = r_key_id_le  # 先維持原行為，由 log 判斷
 
     # 載入我的私鑰（cache by receiver_key_id）
     if r_key_id not in ltsm_cache:
         try:
             ltsm_cache[r_key_id] = await _load_my_key(page, my_mid, r_key_id)
-        except Exception:
+            _dlog(f"_load_my_key OK: ltsm={ltsm_cache[r_key_id]}")
+        except Exception as e:
+            _dlog(f"_load_my_key 失敗 (r_key_id={r_key_id}): {e}")
             return None
     my_ltsm = ltsm_cache[r_key_id]
 
@@ -193,7 +209,9 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         try:
             _, pub_b64 = await get_recipient_key(page, token, sender_mid)
             pub_cache[sender_mid] = pub_b64
-        except Exception:
+            _dlog(f"get_recipient_key OK: sender={sender_mid[:12]}")
+        except Exception as e:
+            _dlog(f"get_recipient_key 失敗: {e}")
             return None
     sender_pub = pub_cache[sender_mid]
 
@@ -202,7 +220,9 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
     if chan_key not in chan_cache:
         try:
             chan_cache[chan_key] = await make_decrypt_channel(page, my_ltsm, sender_pub)
-        except Exception:
+            _dlog(f"make_decrypt_channel OK: channel={chan_cache[chan_key]}")
+        except Exception as e:
+            _dlog(f"make_decrypt_channel 失敗: {e}")
             return None
     channel_id = chan_cache[chan_key]
 
@@ -212,12 +232,14 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         int(msg.get("contentType", 0)),
         channel_id,
     )
+    _dlog(f"decrypt_e2ee_chunks → {repr(plaintext[:40]) if plaintext else None}")
     if not plaintext:
         return None
     try:
         data = json.loads(plaintext)
         return data.get("text")
-    except Exception:
+    except Exception as e:
+        _dlog(f"json.loads 失敗: {e}, raw={repr(plaintext[:40])}")
         return None
 
 

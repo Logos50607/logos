@@ -651,6 +651,7 @@ class TuiApp(App):
                 text = await decrypt_e2ee_message(
                     self._page, m, self._my_mid, token,
                     self._ltsm_cache, self._chan_cache, self._pub_cache,
+                    debug_log=_LOG if ok + fail == 0 else None,  # 只診斷第一則
                 )
                 if text is not None:
                     m["text"] = text
