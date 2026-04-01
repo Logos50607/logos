@@ -181,49 +181,61 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         _dlog(f"skip: chunks={type(chunks)} len={len(chunks) if chunks else 0}")
         return None
     sender_mid = msg.get("from", "")
-    if not sender_mid or sender_mid == my_mid:
-        _dlog(f"skip: sender={sender_mid[:12]}")
+    if not sender_mid:
         return None
 
     try:
-        r_key_id = struct.unpack_from('>I', base64.b64decode(chunks[4])[:4])[0]
         s_key_id = struct.unpack_from('>I', base64.b64decode(chunks[3])[:4])[0]
+        r_key_id = struct.unpack_from('>I', base64.b64decode(chunks[4])[:4])[0]
         _dlog(f"r_key_id={r_key_id} s_key_id={s_key_id}")
     except Exception as e:
         _dlog(f"parse key_id 失敗: {e}")
         return None
 
-    # 載入我的私鑰（cache by receiver_key_id）
-    if r_key_id not in ltsm_cache:
-        try:
-            ltsm_cache[r_key_id] = await _load_my_key(page, my_mid, r_key_id)
-            _dlog(f"_load_my_key OK: ltsm={ltsm_cache[r_key_id]}")
-        except Exception as e:
-            _dlog(f"_load_my_key 失敗 (r_key_id={r_key_id}): {e}")
-            return None
-    my_ltsm = ltsm_cache[r_key_id]
+    # 判斷方向：自己發出 → 私鑰=s_key_id；收到 → 私鑰=r_key_id
+    i_am_sender = (sender_mid == my_mid)
+    if i_am_sender:
+        my_key_id    = s_key_id
+        other_key_id = r_key_id
+        other_mid    = msg.get("to", "")
+        from_mid, to_mid = my_mid, other_mid
+    else:
+        my_key_id    = r_key_id
+        other_key_id = s_key_id
+        other_mid    = sender_mid
+        from_mid, to_mid = sender_mid, msg.get("to", "")
 
-    # 取得發話者公鑰（扁平 pub_store，keyId 全域唯一）
-    s_key_str = str(s_key_id)
-    if s_key_str not in pub_store:
+    # 載入我的私鑰
+    if my_key_id not in ltsm_cache:
         try:
-            fetched_key_id, pub_b64 = await get_recipient_key(page, token, sender_mid)
+            ltsm_cache[my_key_id] = await _load_my_key(page, my_mid, my_key_id)
+            _dlog(f"_load_my_key OK: ltsm={ltsm_cache[my_key_id]}")
+        except Exception as e:
+            _dlog(f"_load_my_key 失敗 (my_key_id={my_key_id}): {e}")
+            return None
+    my_ltsm = ltsm_cache[my_key_id]
+
+    # 取得對方公鑰（扁平 pub_store，找不到才打 API）
+    other_key_str = str(other_key_id)
+    if other_key_str not in pub_store:
+        try:
+            fetched_key_id, pub_b64 = await get_recipient_key(page, token, other_mid)
             pub_store[str(fetched_key_id)] = pub_b64
             _dlog(f"get_recipient_key OK: keyId={fetched_key_id}")
         except Exception as e:
             _dlog(f"get_recipient_key 失敗: {e}")
             return None
-    if s_key_str not in pub_store:
-        _dlog(f"sender keyId={s_key_id} 不在 store，且 API 回傳的是不同 key（對方已輪換）")
+    if other_key_str not in pub_store:
+        _dlog(f"other keyId={other_key_id} 不在 store，且 API 回傳的是不同 key（已輪換）")
         msg["_decrypt_skip"] = True
         return None
-    sender_pub = pub_store[s_key_str]
+    other_pub = pub_store[other_key_str]
 
-    # 建立解密 channel（cache by (my_ltsm, sender_mid, s_key_id)）
-    chan_key = (my_ltsm, sender_mid, s_key_id)
+    # 建立解密 channel（cache by (my_ltsm, other_mid, other_key_id)）
+    chan_key = (my_ltsm, other_mid, other_key_id)
     if chan_key not in chan_cache:
         try:
-            chan_cache[chan_key] = await make_decrypt_channel(page, my_ltsm, sender_pub)
+            chan_cache[chan_key] = await make_decrypt_channel(page, my_ltsm, other_pub)
             _dlog(f"make_decrypt_channel OK: channel={chan_cache[chan_key]}")
         except Exception as e:
             _dlog(f"make_decrypt_channel 失敗: {e}")
@@ -233,7 +245,7 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
     try:
         plaintext = await decrypt_e2ee_chunks(
             page, chunks,
-            sender_mid, msg.get("to", ""),
+            from_mid, to_mid,
             int(msg.get("contentType", 0)),
             channel_id,
         )
