@@ -209,10 +209,7 @@ class MessageItem(ListItem):
         ts         = _ts(self._msg.get("createdTime", 0))
         sender_mid = self._msg.get("from", "")
         if self.is_mine:
-            bubble = Text.assemble(
-                (f" {text}  ", "black on green3"), (f" {ts}", "dim"),
-            )
-            yield Static(Align.right(bubble))
+            yield Static(Text.assemble((f" {text}  ", ""), (ts, "dim")))
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, "")
@@ -313,8 +310,9 @@ Screen { layout: vertical; }
 ChatItem { height: 4; padding: 0 1; }
 ChatItem.--highlight { background: $primary-darken-1; }
 MessageItem { height: auto; padding: 0 1; margin-bottom: 1; }
-MessageItem > Static { width: 85%; }
-MessageItem.--mine > Static { width: 1fr; }
+MessageItem > Static { width: auto; max-width: 85%; }
+MessageItem.--mine { align-horizontal: right; }
+MessageItem.--mine > Static { background: green3; color: black; }
 """
 
 class TuiApp(App):
