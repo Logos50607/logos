@@ -644,7 +644,8 @@ class TuiApp(App):
                        if (int(m.get("contentType", 0)) == 0
                            and m.get("text") is None
                            and m.get("chunks")
-                           and m.get("from") != self._my_mid)]
+                           and m.get("from") != self._my_mid
+                           and not m.get("_decrypt_skip"))]
             if not pending:
                 return
             with _LOG.open("a") as f:

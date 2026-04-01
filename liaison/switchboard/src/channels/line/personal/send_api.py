@@ -233,6 +233,10 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         )
     except Exception as e:
         _dlog(f"decrypt_e2ee_chunks 失敗: {e}")
+        err = str(e)
+        # key 不對（sender key 已輪換）→ 標記跳過，避免每次重試
+        if "authentication failure" in err or "Failed to decrypt" in err:
+            msg["_decrypt_skip"] = True
         return None
     _dlog(f"decrypt_e2ee_chunks → {repr(plaintext[:40]) if plaintext else None}")
     if not plaintext:
