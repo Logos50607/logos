@@ -209,11 +209,10 @@ class MessageItem(ListItem):
         ts         = _ts(self._msg.get("createdTime", 0))
         sender_mid = self._msg.get("from", "")
         if self.is_mine:
-            text_s = Static(Text.assemble((f" {text}  ", ""), (f"{ts}", "dim")))
-            text_s.styles.background = "ansi_bright_green"
-            text_s.styles.color      = "black"
-            text_s.styles.text_align = "right"
-            yield text_s
+            bubble = Text.assemble(
+                (f" {text}  ", "black on green3"), (f" {ts}", "dim"),
+            )
+            yield Static(Align.right(bubble))
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, "")
