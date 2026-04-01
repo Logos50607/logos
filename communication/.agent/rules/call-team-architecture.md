@@ -53,6 +53,27 @@ description: "..."            # 任務用途說明
 2. 若該 provider quota 耗盡 → 依序 fallback：claude → gemini → gemini-web
 3. quota 狀態由內控組提供查詢介面（`internal-control/quota-check`）
 
+## 工具存取範圍（--allowedTools）
+
+通訊組組出 `-p` 指令時，依下列原則限縮工具範圍：
+
+```yaml
+allowed_read:  <target_cwd>/**          # 只讀目標組自己的資料夾
+allowed_write:
+  - <target_cwd>/.agent/**
+  - <target_cwd>/AGENT_PLAN.md
+  - <target_cwd>/ASK_HUMAN.md
+```
+
+**例外**：若任務需要讀取其他組的資料，必須在 registry 條目中明確聲明額外的 `extra_read` 路徑，並標注原因。不得預設給予 monorepo 全讀權限。
+
+Registry 條目中可加入：
+
+```yaml
+extra_read:
+  - /data/logos/<other-team>/<project>/**   # 需要讀取的額外路徑，附理由
+```
+
 ## 各組必要配合
 
-每個目標組必須在自身目錄下提供 `receive-task` workflow，作為被 `-p` 喚醒時的入口。
+每個目標組必須在自身 `.agent/workflows/` 下提供 `receive-task.md`，作為被 `-p` 喚醒時的入口。

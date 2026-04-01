@@ -1,5 +1,11 @@
 # TODOLIST
 
+## 工具獨立化
+
+- [ ] 2026-04-01 switchboard 從 liaison/ 遷出，發布為獨立工具專案；liaison 改為使用者角色，在 .agent/skills/ 寫援引 skill
+      前置條件：delivery 組建立打包/發布流程
+- [ ] 2026-04-01 盤點其他類似 switchboard 的「工具型專案」是否也需要遷出所在組別
+
 ## 跨組基礎建設
 
 - [ ] 2026-03-29 通訊組：起 `call-agent` 專案——封裝 `claude -p`，支援 caller 追溯（human / agent:<team> / cron:<job>）、目標組 disciplines + AGENT_PLAN 自動注入、可選額外 context 注入、call log 寫入；已有 global skill `claude-cli-subprocess` 作為技術基礎
