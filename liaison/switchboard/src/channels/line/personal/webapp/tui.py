@@ -181,6 +181,8 @@ class MessageItem(ListItem):
         if raw_text:
             return str(raw_text)
         if self._msg.get("chunks"):
+            if self.is_mine:
+                return "[已發送]"
             return "🔐 [E2EE]"
         return ""
 
@@ -641,7 +643,8 @@ class TuiApp(App):
             pending = [m for m in msgs
                        if (int(m.get("contentType", 0)) == 0
                            and m.get("text") is None
-                           and m.get("chunks"))]
+                           and m.get("chunks")
+                           and m.get("from") != self._my_mid)]
             if not pending:
                 return
             with _LOG.open("a") as f:
