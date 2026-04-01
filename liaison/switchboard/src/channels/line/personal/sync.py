@@ -147,6 +147,7 @@ async def _fetch_messages(page, ctx: dict) -> None:
             continue
         fresh = await fetch_chat_messages(page, token, mid, 30)
         fresh_ids = {m["id"] for m in fresh}
+        new       = [m for m in fresh if m["id"] not in local_ids]
         # 偵測對方收回：只比對「時間落在 fresh 視窗內」的本地訊息
         if fresh:
             window_start = min(int(m.get("createdTime", 0)) for m in fresh)
@@ -248,12 +249,20 @@ async def main():
         pub_store = _read_json(_PUBKEYS, {})
         pub_store.update(await load_idb_pubkeys(page))
 
+        raw_msgs = _read_json(_MSGS, {})
+        # 清除 TUI 樂觀訊息（local- ID）：有真實版本的直接移除，避免重複
+        for mid, chat in raw_msgs.items():
+            real_texts = {str(m.get("text","")) for m in chat if not m["id"].startswith("local-")}
+            raw_msgs[mid] = [m for m in chat
+                             if not m["id"].startswith("local-")
+                             or str(m.get("text","")) not in real_texts]
+
         ctx = {
             "token":      token,
             "token_ts":   time.time(),
             "my_mid":     my_mid,
             "key_id":     key_id,
-            "messages":   _read_json(_MSGS, {}),
+            "messages":   raw_msgs,
             "contacts":   contacts,
             "pub_store":  pub_store,
             "ltsm_cache": {},
