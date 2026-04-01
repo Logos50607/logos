@@ -159,13 +159,13 @@ async def send_e2ee_text(page, to: str, text: str,
 
 async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
                                 ltsm_cache: dict, chan_cache: dict,
-                                pub_cache: dict, debug_log=None) -> str | None:
+                                pub_store: dict, debug_log=None) -> str | None:
     """
     解密單則收到的 E2EE V2 訊息，回傳明文 text 或 None。
 
-    ltsm_cache: {receiver_key_id: my_ltsm_key_id}  ← 跨訊息共用，避免重複掃描
-    chan_cache:  {(my_ltsm_id, sender_mid): channel_ltsm_id}
-    pub_cache:   {sender_mid: sender_pub_b64}
+    ltsm_cache: {r_key_id: my_ltsm_key_id}
+    chan_cache:  {(my_ltsm_id, sender_mid, s_key_id): channel_ltsm_id}
+    pub_store:   {sender_mid: {key_id_str: pub_b64}}  ← 持久化，按 keyId 分開存
     debug_log:   Path → 只有第一則訊息傳入，逐步記錄失敗原因
     """
     import base64, struct
@@ -187,9 +187,10 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
 
     try:
         r_key_id = struct.unpack_from('>I', base64.b64decode(chunks[4])[:4])[0]
-        _dlog(f"chunks[4] r_key_id={r_key_id}")
+        s_key_id = struct.unpack_from('>I', base64.b64decode(chunks[3])[:4])[0]
+        _dlog(f"r_key_id={r_key_id} s_key_id={s_key_id}")
     except Exception as e:
-        _dlog(f"parse r_key_id 失敗: {e}")
+        _dlog(f"parse key_id 失敗: {e}")
         return None
 
     # 載入我的私鑰（cache by receiver_key_id）
@@ -202,19 +203,25 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
             return None
     my_ltsm = ltsm_cache[r_key_id]
 
-    # 取得發話者公鑰（cache by sender_mid）
-    if sender_mid not in pub_cache:
+    # 取得發話者公鑰（按 senderKeyId 查，找不到才打 API 並存下來）
+    s_key_str = str(s_key_id)
+    sender_keys = pub_store.setdefault(sender_mid, {})
+    if s_key_str not in sender_keys:
         try:
-            _, pub_b64 = await get_recipient_key(page, token, sender_mid)
-            pub_cache[sender_mid] = pub_b64
-            _dlog(f"get_recipient_key OK: sender={sender_mid[:12]}")
+            fetched_key_id, pub_b64 = await get_recipient_key(page, token, sender_mid)
+            sender_keys[str(fetched_key_id)] = pub_b64
+            _dlog(f"get_recipient_key OK: keyId={fetched_key_id}")
         except Exception as e:
             _dlog(f"get_recipient_key 失敗: {e}")
             return None
-    sender_pub = pub_cache[sender_mid]
+    if s_key_str not in sender_keys:
+        _dlog(f"sender keyId={s_key_id} 不在 store，且 API 回傳的是不同 key（對方已輪換）")
+        msg["_decrypt_skip"] = True
+        return None
+    sender_pub = sender_keys[s_key_str]
 
-    # 建立解密 channel（cache by (my_ltsm, sender_mid)）
-    chan_key = (my_ltsm, sender_mid)
+    # 建立解密 channel（cache by (my_ltsm, sender_mid, s_key_id)）
+    chan_key = (my_ltsm, sender_mid, s_key_id)
     if chan_key not in chan_cache:
         try:
             chan_cache[chan_key] = await make_decrypt_channel(page, my_ltsm, sender_pub)
@@ -233,9 +240,7 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         )
     except Exception as e:
         _dlog(f"decrypt_e2ee_chunks 失敗: {e}")
-        err = str(e)
-        # key 不對（sender key 已輪換）→ 標記跳過，避免每次重試
-        if "authentication failure" in err or "Failed to decrypt" in err:
+        if "authentication failure" in str(e) or "Failed to decrypt" in str(e):
             msg["_decrypt_skip"] = True
         return None
     _dlog(f"decrypt_e2ee_chunks → {repr(plaintext[:40]) if plaintext else None}")

@@ -43,6 +43,7 @@ _DATA.mkdir(exist_ok=True)
 _MSGS    = _DATA / "messages.json"
 _FRIENDS = _DATA / "friends.json"
 _GROUPS  = _DATA / "groups.json"
+_PUBKEYS = _DATA / "pubkeys.json"
 _LOG     = _DATA / "tui.log"
 
 import traceback as _traceback
@@ -330,8 +331,8 @@ class TuiApp(App):
         self._chat_shown:    dict[str, int] = {}   # 各聊天室目前顯示幾則
         self._reply_to:      dict | None    = None  # 目前選取要回覆的訊息
         self._ltsm_cache:    dict           = {}    # {receiver_key_id: my_ltsm_id}
-        self._chan_cache:    dict           = {}    # {(my_ltsm_id, sender_mid): channel_id}
-        self._pub_cache:     dict           = {}    # {sender_mid: pub_b64}
+        self._chan_cache:    dict           = {}    # {(my_ltsm_id, sender_mid, s_key_id): channel_id}
+        self._pub_store:     dict           = {}    # {sender_mid: {key_id_str: pub_b64}} 持久化
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -354,6 +355,7 @@ class TuiApp(App):
         _migrate_legacy()
         self._data     = _load_messages()
         self._contacts = _load_contacts()
+        self._pub_store = json.loads(_PUBKEYS.read_text()) if _PUBKEYS.exists() else {}
         self._rebuild_list()
         self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
         self.set_interval(10, self._poll)
@@ -654,7 +656,7 @@ class TuiApp(App):
             for m in pending:
                 text = await decrypt_e2ee_message(
                     self._page, m, self._my_mid, token,
-                    self._ltsm_cache, self._chan_cache, self._pub_cache,
+                    self._ltsm_cache, self._chan_cache, self._pub_store,
                     debug_log=_LOG if ok == 0 and fail <= 5 else None,  # 只診斷前幾則
                 )
                 if text is not None:
@@ -664,6 +666,8 @@ class TuiApp(App):
                     fail += 1
             with _LOG.open("a") as f:
                 f.write(f"[{datetime.now()}] decrypt_chat 結束：成功 {ok}，失敗 {fail}\n")
+            # pub_store 可能新增了 key → 持久化
+            _PUBKEYS.write_text(json.dumps(self._pub_store, ensure_ascii=False))
             if ok:
                 _save_messages(self._data)
                 if self.current_chat == mid:
