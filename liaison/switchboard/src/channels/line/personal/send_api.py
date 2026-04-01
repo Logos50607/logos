@@ -33,7 +33,8 @@ from playwright.async_api import async_playwright
 
 sys.path.insert(0, str(Path(__file__).parent))
 from gw_client import CDP_URL, find_ext_page, get_access_token, compute_hmac, call_api
-from encrypt_e2ee import encrypt_message, _SANDBOX_JS
+from encrypt_e2ee import (encrypt_message, _SANDBOX_JS,
+                          _load_my_key, make_decrypt_channel, decrypt_e2ee_chunks)
 
 _PATH_SEND      = "/api/talk/thrift/Talk/TalkService/sendMessage"
 _PATH_NEGOTIATE = "/api/talk/thrift/Talk/TalkService/negotiateE2EEPublicKey"
@@ -154,7 +155,73 @@ async def send_e2ee_text(page, to: str, text: str,
     return {'error': '重試 3 次仍失敗'}
 
 
-# ── 5. 收回訊息 ───────────────────────────────────────────────────
+# ── 5. 解密收到的訊息 ─────────────────────────────────────────────
+
+async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
+                                ltsm_cache: dict, chan_cache: dict,
+                                pub_cache: dict) -> str | None:
+    """
+    解密單則收到的 E2EE V2 訊息，回傳明文 text 或 None。
+
+    ltsm_cache: {receiver_key_id: my_ltsm_key_id}  ← 跨訊息共用，避免重複掃描
+    chan_cache:  {(my_ltsm_id, sender_mid): channel_ltsm_id}
+    pub_cache:   {sender_mid: sender_pub_b64}
+    """
+    chunks = msg.get("chunks")
+    if not chunks or len(chunks) < 5:
+        return None
+    sender_mid = msg.get("from", "")
+    if not sender_mid or sender_mid == my_mid:
+        return None  # 自己傳的已有 text，不需解密
+
+    import base64, struct
+    try:
+        r_key_id = struct.unpack_from('<I', base64.b64decode(chunks[4])[:4])[0]
+    except Exception:
+        return None
+
+    # 載入我的私鑰（cache by receiver_key_id）
+    if r_key_id not in ltsm_cache:
+        try:
+            ltsm_cache[r_key_id] = await _load_my_key(page, my_mid, r_key_id)
+        except Exception:
+            return None
+    my_ltsm = ltsm_cache[r_key_id]
+
+    # 取得發話者公鑰（cache by sender_mid）
+    if sender_mid not in pub_cache:
+        try:
+            _, pub_b64 = await get_recipient_key(page, token, sender_mid)
+            pub_cache[sender_mid] = pub_b64
+        except Exception:
+            return None
+    sender_pub = pub_cache[sender_mid]
+
+    # 建立解密 channel（cache by (my_ltsm, sender_mid)）
+    chan_key = (my_ltsm, sender_mid)
+    if chan_key not in chan_cache:
+        try:
+            chan_cache[chan_key] = await make_decrypt_channel(page, my_ltsm, sender_pub)
+        except Exception:
+            return None
+    channel_id = chan_cache[chan_key]
+
+    plaintext = await decrypt_e2ee_chunks(
+        page, chunks,
+        sender_mid, msg.get("to", ""),
+        int(msg.get("contentType", 0)),
+        channel_id,
+    )
+    if not plaintext:
+        return None
+    try:
+        data = json.loads(plaintext)
+        return data.get("text")
+    except Exception:
+        return None
+
+
+# ── 6. 收回訊息 ───────────────────────────────────────────────────
 
 _PATH_UNSEND = "/api/talk/thrift/Talk/TalkService/unsendMessage"
 

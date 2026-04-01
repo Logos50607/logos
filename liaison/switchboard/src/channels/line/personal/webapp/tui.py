@@ -327,6 +327,9 @@ class TuiApp(App):
         self._sidebar_shown: int            = 0    # 已顯示幾筆
         self._chat_shown:    dict[str, int] = {}   # 各聊天室目前顯示幾則
         self._reply_to:      dict | None    = None  # 目前選取要回覆的訊息
+        self._ltsm_cache:    dict           = {}    # {receiver_key_id: my_ltsm_id}
+        self._chan_cache:    dict           = {}    # {(my_ltsm_id, sender_mid): channel_id}
+        self._pub_cache:     dict           = {}    # {sender_mid: pub_b64}
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -362,6 +365,8 @@ class TuiApp(App):
             self._unread.pop(item.mid, None)
             self._show_messages(item.mid)
             self.query_one("#input", Input).focus()
+            if self._connected:
+                self.run_worker(self._decrypt_chat(item.mid), name="decrypt")
         elif isinstance(item, MessageItem):
             self._reply_to = item._msg
             preview = str(item._msg.get("text", _preview(item._msg)))[:50]
@@ -551,6 +556,9 @@ class TuiApp(App):
                 if self.current_chat == mid:
                     for m in sorted(new, key=lambda x: int(x.get("createdTime", 0))):
                         self._append_message(m, mid)
+                # 若有 E2EE 訊息，背景解密
+                if any(m.get("chunks") and m.get("text") is None for m in new):
+                    self.run_worker(self._decrypt_chat(mid), name=f"decrypt-{mid}")
             if changed:
                 _save_messages(self._data)
         except Exception:
@@ -621,6 +629,34 @@ class TuiApp(App):
         except Exception as e:
             self.notify(f"收回失敗: {e}", severity="error")
             _log_exc("unsend 失敗")
+
+    async def _decrypt_chat(self, mid: str) -> None:
+        """解密該聊天室所有未解密的 E2EE 訊息，解完後重繪。"""
+        if not self._connected or not self._my_mid:
+            return
+        try:
+            from send_api import decrypt_e2ee_message
+            token   = await self._get_token()
+            msgs    = self._data.get(mid, [])
+            changed = False
+            for m in msgs:
+                if (int(m.get("contentType", 0)) != 0
+                        or m.get("text") is not None
+                        or not m.get("chunks")):
+                    continue
+                text = await decrypt_e2ee_message(
+                    self._page, m, self._my_mid, token,
+                    self._ltsm_cache, self._chan_cache, self._pub_cache,
+                )
+                if text is not None:
+                    m["text"] = text
+                    changed   = True
+            if changed:
+                _save_messages(self._data)
+                if self.current_chat == mid:
+                    self._show_messages(mid)
+        except Exception:
+            _log_exc("decrypt_chat 失敗")
 
     # ── 渲染 ─────────────────────────────────────────────────────
 

@@ -109,6 +109,32 @@ _CREATE_CHANNEL_JS = """([keyId, pubB64]) => new Promise((resolve) => {
     }, 40);
 })"""
 
+_DECRYPT_V2_JS = """([chId, frm, to, sKId, rKId, ctType, encB64]) => new Promise((resolve) => {
+    const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
+    if (!iframe) { resolve({error: "no iframe"}); return; }
+    const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
+    // encB64 = IV(16) + seqKeyId(12) + ciphertext：完整還原自 encrypt_v2 輸出
+    const encBytes = Uint8Array.from(atob(encB64), c => c.charCodeAt(0));
+    setTimeout(() => {
+        const handler = (evt) => {
+            const d = evt.data;
+            if (d && d.sandboxId === sandboxId &&
+                (d.type === "response" || d.type === "error")) {
+                if (d.type === "response" && !(d.data instanceof ArrayBuffer) && !ArrayBuffer.isView(d.data)) return;
+                window.removeEventListener("message", handler);
+                if (d.type === "error") { resolve({error: String(d.data)}); return; }
+                resolve({ok: new TextDecoder().decode(new Uint8Array(d.data))});
+            }
+        };
+        window.addEventListener("message", handler);
+        iframe.contentWindow.postMessage({sandboxId, type: "request",
+            data: {command: "e2eechannel_decrypt_v2", ltsmKeyId: chId,
+                   payload: {from: frm, to, senderKeyId: sKId, receiverKeyId: rKId,
+                             contentType: ctType, ciphertext: encBytes}}}, "*");
+        setTimeout(() => resolve({error: "timeout"}), 8000);
+    }, 40);
+})"""
+
 _ENCRYPT_V2_JS = """([chId, to, frm, sKId, rKId, ctType, seqN, pt]) => new Promise((resolve) => {
     const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
     if (!iframe) { resolve({error: "no iframe"}); return; }
@@ -190,3 +216,45 @@ async def encrypt_message(page,
     if 'error' in r:
         raise RuntimeError(f"e2eechannel_encrypt_v2 失敗: {r['error']}")
     return r['ok']
+
+
+# ── 3. 解密入口 ───────────────────────────────────────────────────
+
+async def make_decrypt_channel(page, my_ltsm_key_id: int, sender_pub_b64: str) -> int:
+    """用我的私鑰 + 發話者公鑰建立解密 channel，回傳 channelLtsmId。"""
+    r = await page.evaluate(_CREATE_CHANNEL_JS, [my_ltsm_key_id, sender_pub_b64])
+    if 'error' in r:
+        raise RuntimeError(f"建立解密 channel 失敗: {r['error']}")
+    return r['ok']
+
+
+async def decrypt_e2ee_chunks(page,
+                               chunks: list,
+                               from_mid: str, to_mid: str,
+                               content_type: int,
+                               channel_ltsm_id: int) -> str | None:
+    """
+    用已建立的 channel 解密 E2EE V2 chunks，回傳明文 JSON 字串或 None。
+
+    chunks = [iv_b64, ct_b64, seqKey_b64, senderKeyId_b64, receiverKeyId_b64]
+    （與 encrypt_message 輸出格式相同）
+    channel_ltsm_id = make_decrypt_channel() 回傳值
+    """
+    import base64 as _b64, struct as _struct
+    if len(chunks) < 5:
+        return None
+    try:
+        s_key_id = _struct.unpack_from('<I', _b64.b64decode(chunks[3])[:4])[0]
+        r_key_id = _struct.unpack_from('<I', _b64.b64decode(chunks[4])[:4])[0]
+        # 還原：IV(16) + seqKeyId(12) + ciphertext = 原始 encrypt_v2 輸出
+        enc_b64  = _b64.b64encode(
+            _b64.b64decode(chunks[0]) + _b64.b64decode(chunks[2]) + _b64.b64decode(chunks[1])
+        ).decode()
+    except Exception:
+        return None
+    r = await page.evaluate(_DECRYPT_V2_JS,
+                            [channel_ltsm_id, from_mid, to_mid,
+                             s_key_id, r_key_id, content_type, enc_b64])
+    if 'error' in r:
+        return None
+    return r.get('ok')
