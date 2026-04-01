@@ -35,8 +35,9 @@ GW_BASE = "https://line-chrome-gw.line-apps.com"
 # ── 2. find_ext_page ─────────────────────────────────────────────
 
 def find_ext_page(ctx):
-    """從 browser context 找到 LINE extension page。"""
-    page = next((p for p in ctx.pages if EXT_ID in p.url), None)
+    """從 browser context 找到 LINE extension 主頁（排除 ltsmSandbox）。"""
+    page = next((p for p in ctx.pages
+                 if EXT_ID in p.url and "ltsmSandbox" not in p.url), None)
     if not page:
         raise RuntimeError("找不到 LINE extension page，請先執行 run.py 登入")
     return page

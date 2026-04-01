@@ -43,10 +43,12 @@ _MSGS    = _DATA / "messages.json"
 _FRIENDS = _DATA / "friends.json"
 _GROUPS  = _DATA / "groups.json"
 _PUBKEYS = _DATA / "pubkeys.json"
-_OUTBOX  = _DATA / "outbox.json"
-_STATE   = _DATA / "state.json"
+_OUTBOX     = _DATA / "outbox.json"
+_STATE      = _DATA / "state.json"
+_TUI_ACTIVE = _DATA / "tui_active"
 
-POLL_INTERVAL = 5
+POLL_INTERVAL_ACTIVE = 5    # TUI 開著時
+POLL_INTERVAL_IDLE   = 600  # TUI 關閉時（10 分鐘）
 
 
 # ── 2. 工具 ───────────────────────────────────────────────────────
@@ -97,8 +99,10 @@ async def _process_outbox(page, ctx: dict) -> None:
             r = await unsend_message(page, item["msg_id"], _token=ctx["token"])
             if r.get("ok"):
                 mid = item.get("mid", "")
-                if mid in msgs:
-                    msgs[mid] = [m for m in msgs[mid] if m.get("id") != item["msg_id"]]
+                for m in msgs.get(mid, []):
+                    if m.get("id") == item["msg_id"]:
+                        m["_unsent"] = True
+                        break
                 changed = True
                 print(f"[{_ts()}] 已收回 {item['msg_id'][:12]}", flush=True)
             else:
@@ -114,14 +118,8 @@ async def _process_outbox(page, ctx: dict) -> None:
             _token=ctx["token"], _my_mid=ctx["my_mid"], _sender_key_id=ctx["key_id"],
         )
         if r.get("ok"):
-            msg = {
-                "from": ctx["my_mid"], "to": to, "text": text,
-                "id":   item.get("local_id", f"sent-{r['seq']}"),
-                "createdTime": str(int(time.time() * 1000)),
-                "contentType": 0,
-            }
-            msgs.setdefault(to, []).append(msg)
-            changed = True
+            # 不寫入 messages.json，讓 _fetch_messages 抓 LINE server 回來的真實 ID
+            # 避免 local_id 與 server ID 同時存在造成 duplicate
             print(f"[{_ts()}] 已發送 → {to[:12]}: {text[:20]}", flush=True)
         else:
             item["_retries"] = retries + 1
@@ -211,7 +209,7 @@ async def _sync_contacts(page, ctx: dict) -> None:
 
 async def main():
     parser = argparse.ArgumentParser(description="LINE sync daemon")
-    parser.add_argument("--interval", type=int, default=POLL_INTERVAL, help="輪詢間隔秒數")
+    parser.add_argument("--interval", type=int, default=POLL_INTERVAL_ACTIVE, help="TUI 開啟時的輪詢間隔秒數")
     args = parser.parse_args()
 
     async with async_playwright() as pw:
@@ -222,9 +220,10 @@ async def main():
         from send_api import get_my_info
         from encrypt_e2ee import load_idb_pubkeys
 
-        print(f"[{_ts()}] 初始化 LTSM（等待 sandbox 就緒）...", flush=True)
-        my_mid, key_id = await get_my_info(page)
+        print(f"[{_ts()}] 取得 token（reload 頁面，等待 LTSM sandbox 初始化）...", flush=True)
         token          = await get_access_token(page)
+        print(f"[{_ts()}] 讀取 my_mid / key_id...", flush=True)
+        my_mid, key_id = await get_my_info(page)
         print(f"[{_ts()}] mid={my_mid[:20]}... key={key_id}", flush=True)
 
         contacts  = {}
@@ -249,9 +248,16 @@ async def main():
 
         _DATA.mkdir(exist_ok=True)
         _write_atomic(_STATE, {"my_mid": my_mid, "key_id": key_id, "ts": int(time.time())})
-        print(f"[{_ts()}] 開始輪詢（每 {args.interval} 秒）", flush=True)
+        print(f"[{_ts()}] 開始輪詢（TUI 開啟時 {POLL_INTERVAL_ACTIVE}s，閒置時 {POLL_INTERVAL_IDLE}s）", flush=True)
 
+        _last_mode = None
         while True:
+            tui_active = _TUI_ACTIVE.exists()
+            interval   = POLL_INTERVAL_ACTIVE if tui_active else POLL_INTERVAL_IDLE
+            if tui_active != _last_mode:
+                mode_str = "高頻" if tui_active else "閒置"
+                print(f"[{_ts()}] 切換為{mode_str}模式（每 {interval}s）", flush=True)
+                _last_mode = tui_active
             try:
                 await _refresh_token(page, ctx)
                 await _process_outbox(page, ctx)
@@ -261,7 +267,7 @@ async def main():
                 _write_atomic(_STATE, {"my_mid": my_mid, "key_id": key_id, "ts": int(time.time())})
             except Exception as e:
                 print(f"[{_ts()}] 輪詢失敗: {e}", flush=True)
-            await asyncio.sleep(args.interval)
+            await asyncio.sleep(interval)
 
 
 if __name__ == "__main__":

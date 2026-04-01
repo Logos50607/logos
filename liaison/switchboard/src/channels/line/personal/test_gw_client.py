@@ -38,6 +38,22 @@ class TestFindExtPage(unittest.TestCase):
         ])
         self.assertIs(gw_client.find_ext_page(ctx), pages[0])
 
+    def test_skips_ltsm_sandbox(self):
+        """ltsmSandbox.html 在前面時應跳過，選 index.html。"""
+        ctx, pages = self._make_ctx([
+            f'chrome-extension://{gw_client.EXT_ID}/ltsmSandbox.html?sandboxId=abc',
+            f'chrome-extension://{gw_client.EXT_ID}/index.html',
+        ])
+        self.assertIs(gw_client.find_ext_page(ctx), pages[1])
+
+    def test_raises_when_only_sandbox(self):
+        """只有 ltsmSandbox → 找不到 → 拋出 RuntimeError。"""
+        ctx, _ = self._make_ctx([
+            f'chrome-extension://{gw_client.EXT_ID}/ltsmSandbox.html?sandboxId=abc',
+        ])
+        with self.assertRaises(RuntimeError):
+            gw_client.find_ext_page(ctx)
+
     def test_raises_when_not_found(self):
         ctx, _ = self._make_ctx(['chrome://newtab', 'https://example.com'])
         with self.assertRaises(RuntimeError):

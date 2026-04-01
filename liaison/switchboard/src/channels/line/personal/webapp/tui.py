@@ -44,8 +44,9 @@ _MSGS    = _DATA / "messages.json"
 _FRIENDS = _DATA / "friends.json"
 _GROUPS  = _DATA / "groups.json"
 _PUBKEYS = _DATA / "pubkeys.json"
-_OUTBOX  = _DATA / "outbox.json"
-_STATE   = _DATA / "state.json"
+_OUTBOX     = _DATA / "outbox.json"
+_STATE      = _DATA / "state.json"
+_TUI_ACTIVE = _DATA / "tui_active"
 _LOG     = _DATA / "tui.log"
 
 import traceback as _traceback
@@ -187,6 +188,8 @@ class MessageItem(ListItem):
         return bool(self._my_mid and self._msg.get("from") == self._my_mid)
 
     def _build_text(self) -> str:
+        if self._msg.get("_unsent"):
+            return "[已收回]"
         ct       = int(self._msg.get("contentType", 0))
         raw_text = self._msg.get("text") or ""
         if ct != 0:
@@ -358,6 +361,7 @@ class TuiApp(App):
 
     def on_mount(self) -> None:
         self.title = "LINE Personal"
+        _TUI_ACTIVE.touch()
         with _LOG.open("a") as f:
             f.write(f"\n[{datetime.now()}] ── TUI 啟動 ──\n")
         _migrate_legacy()
@@ -436,6 +440,7 @@ class TuiApp(App):
     def action_quit(self) -> None:
         """直接強制退出，kill 整個 process group（Python + uv 同時死，shell 立刻拿回 terminal）。"""
         import os, signal, termios
+        _TUI_ACTIVE.unlink(missing_ok=True)
         with _LOG.open("a") as f:
             f.write(f"[{datetime.now()}] action_quit called\n")
         # 先送 escape sequence 還原 terminal 顯示
