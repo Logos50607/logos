@@ -94,8 +94,8 @@ async def get_obs_token(page, gw_token: str) -> str:
 # ── 4. compute_hmac ──────────────────────────────────────────────
 
 async def compute_hmac(page, access_token: str, path: str, body: str) -> str:
-    """透過 ltsmSandbox iframe 計算 X-Hmac。"""
-    result = await page.evaluate('''([token, path, body]) => new Promise((resolve) => {
+    """透過 ltsmSandbox iframe 計算 X-Hmac（ltsm_not_ready 自動重試最多 20 次）。"""
+    _JS = '''([token, path, body]) => new Promise((resolve) => {
         const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
         if (!iframe) return resolve({error: "no iframe"});
         const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
@@ -120,11 +120,16 @@ async def compute_hmac(page, access_token: str, path: str, body: str) -> str:
             }, "*");
             setTimeout(() => resolve({error: "timeout"}), 5000);
         }, 40);
-    })''', [access_token, path, body])
-
-    if 'error' in result:
-        raise RuntimeError(f"HMAC 計算失敗: {result['error']}")
-    return result['hmac']
+    })'''
+    for _attempt in range(20):
+        result = await page.evaluate(_JS, [access_token, path, body])
+        if 'hmac' in result:
+            return result['hmac']
+        err = str(result.get('error', ''))
+        if 'not_ready' not in err and 'no iframe' not in err:
+            raise RuntimeError(f"HMAC 計算失敗: {err}")
+        await asyncio.sleep(1)
+    raise RuntimeError("LTSM sandbox 20 秒內未就緒（hmac）")
 
 
 # ── 5. call_api ──────────────────────────────────────────────────
@@ -150,4 +155,9 @@ def call_api(path: str, body_obj, access_token: str, hmac: str) -> dict:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        return {'_error': e.code, '_body': e.read().decode()[:200]}
+        body = e.read().decode()
+        try:
+            # LINE 常在 HTTP 4xx body 裡放真正的 protocol code（如 code:84）
+            return json.loads(body)
+        except Exception:
+            return {'_error': e.code, '_body': body}

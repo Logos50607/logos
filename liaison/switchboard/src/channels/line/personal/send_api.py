@@ -57,10 +57,17 @@ async def get_my_info(page) -> tuple[str, int]:
         raise RuntimeError("找不到 lcs_secure_* 金鑰，請先登入")
 
     enc = await page.evaluate(f"localStorage.getItem('lcs_secure_{my_mid}')")
-    r = await page.evaluate(_SANDBOX_JS,
-                            {'command': 'decrypt_with_storage_key', 'payload': enc})
-    if 'error' in r:
-        raise RuntimeError(f"decrypt storage 失敗: {r['error']}")
+    for _attempt in range(20):
+        r = await page.evaluate(_SANDBOX_JS,
+                                {'command': 'decrypt_with_storage_key', 'payload': enc})
+        if 'ok' in r:
+            break
+        err = str(r.get('error', ''))
+        if 'ltsm_not_ready' not in err and 'no iframe' not in err:
+            raise RuntimeError(f"decrypt storage 失敗: {r['error']}")
+        await asyncio.sleep(1)
+    else:
+        raise RuntimeError("LTSM sandbox 20 秒內未就緒")
 
     store = json.loads(r['ok'])
     key_ids = [int(k) for k in store.get('exportedKeyMap', {}).keys()]
@@ -90,7 +97,8 @@ async def get_recipient_key(page, token: str, recipient_mid: str) -> tuple[int, 
 async def _do_send(page, to: str, text: str, token: str,
                    my_mid: str, sender_key_id: int,
                    receiver_key_id: int, receiver_pub_b64: str,
-                   reply_to_id: str | None = None) -> dict:
+                   reply_to_id: str | None = None,
+                   to_type: int = 0) -> dict:
     """用給定的 key 加密並呼叫 sendMessage，回傳原始 API 結果。"""
     seq_num = int(time.time() * 1000) & 0x7FFFFFFF
     chunks  = await encrypt_message(page, to, my_mid,
@@ -98,7 +106,7 @@ async def _do_send(page, to: str, text: str, token: str,
                                     receiver_pub_b64, seq_num,
                                     json.dumps({'text': text}))
     msg = {
-        "from": my_mid, "to": to, "toType": 0,
+        "from": my_mid, "to": to, "toType": to_type,
         "id": f"local-{seq_num}", "contentType": 0,
         "contentMetadata": {"e2eeVersion": "2"},
         "hasContent": False, "chunks": chunks,
@@ -116,9 +124,57 @@ async def _do_send(page, to: str, text: str, token: str,
 
 # ── 4. 帶重試的完整流程 ───────────────────────────────────────────
 
+def _group_members_from_history(group_mid: str, my_mid: str) -> list[str]:
+    """從訊息歷史推導群組成員（曾發言者，不含自己）。"""
+    import json
+    from pathlib import Path
+    msgs_file = Path(__file__).parent / "data" / "messages.json"
+    data = json.loads(msgs_file.read_text())
+    msgs = data.get(group_mid, [])
+    return list({m.get("from") for m in msgs if m.get("from")} - {my_mid, None})
+
+
+async def send_e2ee_group_text(page, group_mid: str, text: str,
+                                reply_to_id: str | None = None) -> dict:
+    """對群組每個成員各加密一份並發送；回傳 {ok, seq} 或 {error}。"""
+    token = await get_access_token(page)
+    my_mid, sender_key_id = await get_my_info(page)
+    members = _group_members_from_history(group_mid, my_mid)
+    if not members:
+        return {"error": "找不到群組成員（訊息歷史為空）"}
+
+    last_seq = None
+    for member_mid in members:
+        print(f">>> 取得 {member_mid[:20]} 的公鑰...", flush=True)
+        try:
+            r_key_id, r_pub = await get_recipient_key(page, token, member_mid)
+        except Exception as e:
+            print(f"    公鑰失敗: {e}", flush=True)
+            continue
+        for attempt in range(3):
+            result = await _do_send(page, group_mid, text, token,
+                                    my_mid, sender_key_id, r_key_id, r_pub,
+                                    reply_to_id=reply_to_id, to_type=2)
+            code = result.get("code", -1)
+            last_seq = result.get("_seq")
+            if code == 0:
+                break
+            if code in (_E2EE_RETRY_ENCRYPT, _E2EE_UPDATE_RECEIVER_KEY):
+                r_key_id, r_pub = await get_recipient_key(page, token, member_mid)
+                continue
+            return {"error": f"sendMessage 失敗 code={code} body={result.get('_body','')[:300]}"}
+        else:
+            return {"error": "重試 3 次仍失敗"}
+
+    return {"ok": True, "seq": last_seq}
+
+
 async def send_e2ee_text(page, to: str, text: str,
                          reply_to_id: str | None = None) -> dict:
-    """發送 E2EE V2 訊息；遇 key 過期自動重取重試（最多 2 次）。"""
+    """發送 E2EE V2 訊息；群組自動分派給每個成員。"""
+    if not to.startswith("U"):
+        return await send_e2ee_group_text(page, to, text, reply_to_id)
+
     print(">>> 取得 token...", flush=True)
     token = await get_access_token(page)
 
@@ -212,7 +268,12 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
             _dlog(f"_load_my_key OK: ltsm={ltsm_cache[my_key_id]}")
         except Exception as e:
             _dlog(f"_load_my_key 失敗 (my_key_id={my_key_id}): {e}")
+            # 用 -1 sentinel 標記：此 session 不再重試（避免重複掃描 50 slots），
+            # 但不設 _decrypt_skip，下次啟動 LTSM 就緒後可重試。
+            ltsm_cache[my_key_id] = -1
             return None
+    if ltsm_cache[my_key_id] == -1:
+        return None
     my_ltsm = ltsm_cache[my_key_id]
 
     # 取得對方公鑰（扁平 pub_store，找不到才打 API）

@@ -48,6 +48,16 @@ _LOG     = _DATA / "tui.log"
 
 import traceback as _traceback
 
+def _is_context_dead(e: Exception) -> bool:
+    """判斷是否為 Playwright page context 被摧毀的錯誤。"""
+    msg = str(e)
+    return any(k in msg for k in (
+        "Execution context was destroyed",
+        "Target page, context or browser has been closed",
+        "Connection closed",
+    ))
+
+
 def _log_exc(tag: str) -> None:
     """將當前例外的完整 traceback 附加到 tui.log。"""
     with _LOG.open("a") as f:
@@ -555,7 +565,17 @@ class TuiApp(App):
     async def _send(self, mid: str, text: str) -> None:
         from send_api import send_e2ee_text
         reply_id = self._reply_to["id"] if self._reply_to else None
-        result   = await send_e2ee_text(self._page, mid, text, reply_to_id=reply_id)
+        try:
+            result = await send_e2ee_text(self._page, mid, text, reply_to_id=reply_id)
+        except Exception as e:
+            if _is_context_dead(e):
+                self._connected = False
+                self.sub_title = "連線中斷，重連中…"
+                self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
+                self.notify("連線中斷，請重連後再試", severity="error")
+            else:
+                self.notify(f"發送失敗: {e}", severity="error")
+            return
         if result.get("ok"):
             msg: dict = {"from": self._my_mid or "", "to": mid,
                          "contentType": 0, "text": text,
@@ -574,7 +594,10 @@ class TuiApp(App):
             if self.current_chat == mid:
                 self._append_message(msg, mid)
         else:
-            self.notify(f"發送失敗: {result.get('error')}", severity="error")
+            err = result.get('error', '(unknown)')
+            with _LOG.open("a") as _f:
+                _f.write(f"\n[{datetime.now()}] _send 失敗: {err}\n")
+            self.notify(f"發送失敗: {err}", severity="error")
 
     async def _poll(self) -> None:
         if not self._connected: return
@@ -615,8 +638,13 @@ class TuiApp(App):
                     self.run_worker(self._decrypt_chat(mid), name=f"decrypt-{mid}")
             if changed:
                 _save_messages(self._data)
-        except Exception:
-            _log_exc("fetch_new 失敗")
+        except Exception as e:
+            if _is_context_dead(e):
+                self._connected = False
+                self.sub_title = "連線中斷，重連中…"
+                self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
+            else:
+                _log_exc("fetch_new 失敗")
 
     async def _sync_contacts(self) -> None:
         """只取 messages.json 中本地尚無名稱的 mid，背景執行不阻塞啟動。"""
