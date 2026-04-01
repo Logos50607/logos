@@ -224,12 +224,16 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
             return None
     channel_id = chan_cache[chan_key]
 
-    plaintext = await decrypt_e2ee_chunks(
-        page, chunks,
-        sender_mid, msg.get("to", ""),
-        int(msg.get("contentType", 0)),
-        channel_id,
-    )
+    try:
+        plaintext = await decrypt_e2ee_chunks(
+            page, chunks,
+            sender_mid, msg.get("to", ""),
+            int(msg.get("contentType", 0)),
+            channel_id,
+        )
+    except Exception as e:
+        _dlog(f"decrypt_e2ee_chunks 失敗: {e}")
+        return None
     _dlog(f"decrypt_e2ee_chunks → {repr(plaintext[:40]) if plaintext else None}")
     if not plaintext:
         return None

@@ -256,5 +256,5 @@ async def decrypt_e2ee_chunks(page,
                             [channel_ltsm_id, from_mid, to_mid,
                              s_key_id, r_key_id, content_type, enc_b64])
     if 'error' in r:
-        return None
+        raise RuntimeError(f"decrypt_v2 sandbox error: {r['error']}")
     return r.get('ok')
