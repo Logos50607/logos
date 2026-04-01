@@ -186,13 +186,11 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         return None
 
     try:
-        r_key_id_le = struct.unpack_from('<I', base64.b64decode(chunks[4])[:4])[0]
-        r_key_id_be = struct.unpack_from('>I', base64.b64decode(chunks[4])[:4])[0]
-        _dlog(f"chunks[4] r_key_id LE={r_key_id_le} BE={r_key_id_be} | my_mid senderKeyId needed")
+        r_key_id = struct.unpack_from('>I', base64.b64decode(chunks[4])[:4])[0]
+        _dlog(f"chunks[4] r_key_id={r_key_id}")
     except Exception as e:
         _dlog(f"parse r_key_id 失敗: {e}")
         return None
-    r_key_id = r_key_id_le  # 先維持原行為，由 log 判斷
 
     # 載入我的私鑰（cache by receiver_key_id）
     if r_key_id not in ltsm_cache:

@@ -244,8 +244,8 @@ async def decrypt_e2ee_chunks(page,
     if len(chunks) < 5:
         return None
     try:
-        s_key_id = _struct.unpack_from('<I', _b64.b64decode(chunks[3])[:4])[0]
-        r_key_id = _struct.unpack_from('<I', _b64.b64decode(chunks[4])[:4])[0]
+        s_key_id = _struct.unpack_from('>I', _b64.b64decode(chunks[3])[:4])[0]
+        r_key_id = _struct.unpack_from('>I', _b64.b64decode(chunks[4])[:4])[0]
         # 還原：IV(16) + seqKeyId(12) + ciphertext = 原始 encrypt_v2 輸出
         enc_b64  = _b64.b64encode(
             _b64.b64decode(chunks[0]) + _b64.b64decode(chunks[2]) + _b64.b64decode(chunks[1])
