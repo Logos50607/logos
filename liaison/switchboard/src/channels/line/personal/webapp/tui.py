@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 from rich.align import Align
+from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -168,6 +169,15 @@ def _load_messages() -> dict:
     return json.loads(_MSGS.read_text()) if _MSGS.exists() else {}
 
 
+def _name_ts_row(name: str, ts: str):
+    """名字左、時間右，展開至泡泡寬度。"""
+    grid = Table.grid(expand=True)
+    grid.add_column(ratio=1)
+    grid.add_column(justify="right")
+    grid.add_row(Text(name, style="bold white"), Text(ts, style="dim"))
+    return grid
+
+
 # ── 2. MessageItem ────────────────────────────────────────────────
 
 class MessageItem(ListItem):
@@ -209,17 +219,16 @@ class MessageItem(ListItem):
         ts         = _ts(self._msg.get("createdTime", 0))
         sender_mid = self._msg.get("from", "")
         if self.is_mine:
-            yield Static(Text.assemble((f" {text}  ", ""), (ts, "dim")))
+            name   = self._contacts.get(sender_mid, "我")
+            yield Static(_name_ts_row(name, ts))
+            yield Static(Text(f" {text} "))
         else:
             color  = _sender_style(sender_mid)
-            sender = self._contacts.get(sender_mid, "")
+            sender = self._contacts.get(sender_mid, sender_mid[:10])
             css_bg = _css_color(color)
             if sender:
-                name_s = Static(Text(f" {sender}", style="bold"))
-                name_s.styles.background = css_bg
-                name_s.styles.color = "black"
-                yield name_s
-            text_s = Static(Text.assemble((f" {text}  ", ""), (ts, "dim")))
+                yield Static(_name_ts_row(sender, ts))
+            text_s = Static(Text(f" {text} "))
             text_s.styles.background = css_bg
             text_s.styles.color = "black"
             yield text_s
