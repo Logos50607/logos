@@ -146,7 +146,21 @@ async def _fetch_messages(page, ctx: dict) -> None:
         if not last_id or last_id in local_ids:
             continue
         fresh = await fetch_chat_messages(page, token, mid, 30)
-        new   = [m for m in fresh if m["id"] not in local_ids]
+        fresh_ids = {m["id"] for m in fresh}
+        # 偵測對方收回：只比對「時間落在 fresh 視窗內」的本地訊息
+        if fresh:
+            window_start = min(int(m.get("createdTime", 0)) for m in fresh)
+            unsent_count = 0
+            for m in msgs.get(mid, []):
+                if (not m["id"].startswith("local-")
+                        and int(m.get("createdTime", 0)) >= window_start
+                        and m["id"] not in fresh_ids
+                        and not m.get("_unsent")):
+                    m["_unsent"] = True
+                    changed = True
+                    unsent_count += 1
+            if unsent_count:
+                print(f"[{_ts()}] {mid[:12]} 偵測到 {unsent_count} 則收回", flush=True)
         if new:
             msgs.setdefault(mid, []).extend(new)
             changed = True

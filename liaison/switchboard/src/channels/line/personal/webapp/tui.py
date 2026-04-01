@@ -178,6 +178,8 @@ class MessageItem(ListItem):
         self._msg      = msg
         self._my_mid   = my_mid
         self._contacts = contacts
+        if my_mid and msg.get("from") == my_mid:
+            self.add_class("--mine")
 
     @property
     def msg_id(self) -> str:
@@ -207,15 +209,14 @@ class MessageItem(ListItem):
         ts         = _ts(self._msg.get("createdTime", 0))
         sender_mid = self._msg.get("from", "")
         if self.is_mine:
-            bubble = Text.assemble(
-                (" ", ""), (f" {text} ", "black on green"),
-                (" ", ""), ("  ", ""), (ts, "dim"),
-            )
-            yield Static(Align.right(bubble))
+            text_s = Static(Text.assemble((f" {text}  ", ""), (ts, "dim")))
+            text_s.styles.background = "ansi_bright_green"
+            text_s.styles.color      = "black"
+            text_s.styles.text_align = "right"
+            yield text_s
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, "")
-            # 用 CSS styles.background 填滿整行寬（Rich Text 背景只蓋文字寬度）
             css_bg = _css_color(color)
             if sender:
                 name_s = Static(Text(f" {sender}", style="bold"))
@@ -312,8 +313,9 @@ Screen { layout: vertical; }
 #input { width: 1fr; }
 ChatItem { height: 4; padding: 0 1; }
 ChatItem.--highlight { background: $primary-darken-1; }
-MessageItem { height: auto; padding: 0 1; }
-MessageItem > Static { width: 1fr; }
+MessageItem { height: auto; padding: 1 1; }
+MessageItem > Static { width: 85%; }
+MessageItem.--mine > Static { margin-left: 15%; }
 """
 
 class TuiApp(App):
