@@ -200,14 +200,16 @@ class MessageItem(ListItem):
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, "")
-            bg     = f"black on {color}"
-            parts: list = []
+            # 用 CSS styles.background 填滿整行寬（Rich Text 背景只蓋文字寬度）
             if sender:
-                # \n 包在同一 styled span 內，Rich 會將該行補滿背景色到容器寬度
-                parts.append((f" {sender}\n", f"bold {bg}"))
-            parts.append((f" {text} ", bg))
-            parts += [("  ", ""), (ts, "dim")]
-            yield Static(Text.assemble(*parts))
+                name_s = Static(Text(f" {sender}", style="bold"))
+                name_s.styles.background = color
+                name_s.styles.color = "black"
+                yield name_s
+            text_s = Static(Text.assemble((f" {text}  ", ""), (ts, "dim")))
+            text_s.styles.background = color
+            text_s.styles.color = "black"
+            yield text_s
 
 
 # ── 3. ChatItem ───────────────────────────────────────────────────
