@@ -638,20 +638,28 @@ class TuiApp(App):
             from send_api import decrypt_e2ee_message
             token   = await self._get_token()
             msgs    = self._data.get(mid, [])
-            changed = False
-            for m in msgs:
-                if (int(m.get("contentType", 0)) != 0
-                        or m.get("text") is not None
-                        or not m.get("chunks")):
-                    continue
+            pending = [m for m in msgs
+                       if (int(m.get("contentType", 0)) == 0
+                           and m.get("text") is None
+                           and m.get("chunks"))]
+            if not pending:
+                return
+            with _LOG.open("a") as f:
+                f.write(f"[{datetime.now()}] decrypt_chat {mid[:12]} 開始，{len(pending)} 則待解密\n")
+            ok = fail = 0
+            for m in pending:
                 text = await decrypt_e2ee_message(
                     self._page, m, self._my_mid, token,
                     self._ltsm_cache, self._chan_cache, self._pub_cache,
                 )
                 if text is not None:
                     m["text"] = text
-                    changed   = True
-            if changed:
+                    ok += 1
+                else:
+                    fail += 1
+            with _LOG.open("a") as f:
+                f.write(f"[{datetime.now()}] decrypt_chat 結束：成功 {ok}，失敗 {fail}\n")
+            if ok:
                 _save_messages(self._data)
                 if self.current_chat == mid:
                     self._show_messages(mid)
