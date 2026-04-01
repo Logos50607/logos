@@ -203,9 +203,10 @@ class MessageItem(ListItem):
             bg     = f"black on {color}"
             parts: list = []
             if sender:
-                parts.append((f" {sender} ", f"bold {bg}"))
-                parts.append(("\n", ""))
-            parts += [(" ", ""), (f" {text} ", bg), (" ", ""), ("  ", ""), (ts, "dim")]
+                # \n 包在同一 styled span 內，Rich 會將該行補滿背景色到容器寬度
+                parts.append((f" {sender}\n", f"bold {bg}"))
+            parts.append((f" {text} ", bg))
+            parts += [("  ", ""), (ts, "dim")]
             yield Static(Text.assemble(*parts))
 
 
@@ -510,6 +511,28 @@ class TuiApp(App):
         except Exception:
             self.sub_title = "已連線"
             _log_exc("preload 失敗")
+        # 連線後批次解密所有待解密訊息
+        self.run_worker(self._decrypt_all_pending(), name="decrypt-all")
+
+    async def _decrypt_all_pending(self) -> None:
+        """解密所有聊天室的待解密 E2EE 訊息（啟動時一次處理）。"""
+        if not self._connected or not self._my_mid:
+            return
+        try:
+            pending_mids = [mid for mid, msgs in self._data.items()
+                            if any(m.get("chunks") and m.get("text") is None
+                                   and not m.get("_decrypt_skip")
+                                   for m in msgs)]
+            if not pending_mids:
+                return
+            self.sub_title = f"解密中… (0/{len(pending_mids)})"
+            for i, mid in enumerate(pending_mids):
+                await self._decrypt_chat(mid)
+                self.sub_title = f"解密中… ({i+1}/{len(pending_mids)})"
+            self.sub_title = "已連線"
+        except Exception:
+            self.sub_title = "已連線"
+            _log_exc("decrypt_all_pending 失敗")
 
     async def _send(self, mid: str, text: str) -> None:
         from send_api import send_e2ee_text
