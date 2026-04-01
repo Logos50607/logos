@@ -228,6 +228,36 @@ async def make_decrypt_channel(page, my_ltsm_key_id: int, sender_pub_b64: str) -
     return r['ok']
 
 
+async def load_idb_pubkeys(page) -> dict:
+    """讀取 IndexedDB LINE_COMMON.e2ee_public_key，回傳 {keyId_str: keyData_b64}。"""
+    result = await page.evaluate("""() => new Promise((resolve) => {
+        const req = indexedDB.open('LINE_COMMON');
+        req.onerror = () => resolve({});
+        req.onsuccess = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('e2ee_public_key')) { resolve({}); return; }
+            const tx = db.transaction('e2ee_public_key', 'readonly');
+            const store = tx.objectStore('e2ee_public_key');
+            const out = {};
+            const cur = store.openCursor();
+            cur.onsuccess = (ev) => {
+                const c = ev.target.result;
+                if (c) {
+                    const pub = c.value && c.value.e2eePublicKey;
+                    if (pub && pub.keyId && pub.keyData) {
+                        out[String(pub.keyId)] = pub.keyData;
+                    }
+                    c.continue();
+                } else {
+                    resolve(out);
+                }
+            };
+            cur.onerror = () => resolve(out);
+        };
+    })""")
+    return result or {}
+
+
 async def decrypt_e2ee_chunks(page,
                                chunks: list,
                                from_mid: str, to_mid: str,

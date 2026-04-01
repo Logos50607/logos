@@ -332,7 +332,7 @@ class TuiApp(App):
         self._reply_to:      dict | None    = None  # 目前選取要回覆的訊息
         self._ltsm_cache:    dict           = {}    # {receiver_key_id: my_ltsm_id}
         self._chan_cache:    dict           = {}    # {(my_ltsm_id, sender_mid, s_key_id): channel_id}
-        self._pub_store:     dict           = {}    # {sender_mid: {key_id_str: pub_b64}} 持久化
+        self._pub_store:     dict           = {}    # {key_id_str: pub_b64} 扁平，持久化
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -465,6 +465,15 @@ class TuiApp(App):
             self._connected  = True
             self.sub_title   = "已連線"
             self.notify("已連線到 LINE ✓")
+            # 從 IndexedDB 載入歷史 E2EE 公鑰（含對方已輪換的舊 key）
+            try:
+                from encrypt_e2ee import load_idb_pubkeys
+                idb_keys = await load_idb_pubkeys(self._page)
+                if idb_keys:
+                    self._pub_store.update(idb_keys)
+                    _PUBKEYS.write_text(json.dumps(self._pub_store, ensure_ascii=False))
+            except Exception:
+                _log_exc("load_idb_pubkeys 失敗")
             # 先同步聯絡人名稱，再開始預載（確保名稱已就緒）
             await self._sync_contacts()
             self.run_worker(self._preload_recent(), name="preload")
