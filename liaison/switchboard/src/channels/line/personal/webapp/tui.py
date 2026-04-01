@@ -109,7 +109,9 @@ _LOC_KEY = {
 # ── 1. 輔助 ───────────────────────────────────────────────────────
 
 def _ts(ms) -> str:
-    try:    return datetime.fromtimestamp(int(ms) / 1000).strftime("%H:%M")
+    try:
+        dt = datetime.fromtimestamp(int(ms) / 1000).astimezone()
+        return dt.strftime("%H:%M ") + dt.strftime("%Z")
     except: return ""
 
 def _meta(m: dict) -> dict:
@@ -216,16 +218,14 @@ class MessageItem(ListItem):
         sender_mid = self._msg.get("from", "")
         if self.is_mine:
             name   = self._contacts.get(sender_mid, "我")
-            name_s = Static(_name_ts_row(name, ts))
-            name_s.styles.text_align = "right"
-            yield name_s
+            yield Static(Align.right(_name_ts_row(name, ts)), classes="name-row")
             yield Static(Text(text), classes="bubble")
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, sender_mid[:10])
             css_bg = _css_color(color)
             if sender:
-                yield Static(_name_ts_row(sender, ts))
+                yield Static(_name_ts_row(sender, ts), classes="name-row")
             text_s = Static(Text(text), classes="bubble")
             text_s.styles.background = css_bg
             text_s.styles.color = "black"
@@ -317,10 +317,10 @@ Screen { layout: vertical; }
 ChatItem { height: 4; padding: 0 1; }
 ChatItem.--highlight { background: $primary-darken-1; }
 MessageItem { height: auto; }
-MessageItem > Static { width: auto; max-width: 85%; }
+.name-row { width: 1fr; }
 MessageItem.--mine { align-horizontal: right; }
 MessageItem.--mine > .bubble { background: #00af00; color: black; }
-.bubble { padding: 0 1; }
+.bubble { padding: 0 1; width: 85%; }
 """
 
 class TuiApp(App):
