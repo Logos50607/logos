@@ -220,9 +220,18 @@ async def _sync_contacts(page, ctx: dict) -> None:
     if g := [m for m in missing_chats if m.startswith("C") or m.startswith("R")]:
         new.update(await _fetch_group_names(page, token, g))
 
-    # 按需：群組內陌生發言者
+    # 按需：群組內陌生發言者（新訊息 + 既有訊息一次性掃描）
     pending = ctx["pending_sender_mids"]
+    seen    = ctx["seen_sender_mids"]
+    for mid, chat in ctx["messages"].items():
+        if not (mid.startswith("C") or mid.startswith("R")):
+            continue
+        for m in chat:
+            sender = m.get("from", "")
+            if sender and sender not in contacts and sender not in seen:
+                pending.add(sender)
     if pending:
+        seen.update(pending)   # 記住已嘗試，下輪不再重掃
         fetched = await _fetch_names(page, token, list(pending))
         new.update(fetched)
         pending.clear()
@@ -283,6 +292,7 @@ async def main():
             "ltsm_cache":          {},
             "chan_cache":           {},
             "pending_sender_mids": set(),
+            "seen_sender_mids":    set(),  # 已嘗試抓過的 sender，避免重複打 API
         }
 
         _DATA.mkdir(exist_ok=True)
