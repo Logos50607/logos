@@ -27,14 +27,13 @@ from datetime import datetime
 from pathlib import Path
 
 from rich.align import Align
-from rich.console import RenderableType
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, Input, Label, ListItem, ListView
+from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Static
 
 ROOT   = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -158,7 +157,7 @@ def _save_messages(data: dict) -> None:
 # ── 2. MessageItem ────────────────────────────────────────────────
 
 class MessageItem(ListItem):
-    """對話氣泡：可選取（Enter 回覆，d 收回自己的）。直接 render() 避免 Static 層問題。"""
+    """對話氣泡：可選取（Enter 回覆，d 收回自己的）。"""
 
     def __init__(self, msg: dict, my_mid: str | None, contacts: dict):
         super().__init__()
@@ -174,33 +173,37 @@ class MessageItem(ListItem):
     def is_mine(self) -> bool:
         return bool(self._my_mid and self._msg.get("from") == self._my_mid)
 
-    def render(self) -> RenderableType:
-        ct         = int(self._msg.get("contentType", 0))
-        raw_text   = self._msg.get("text") or ""
+    def _build_text(self) -> str:
+        ct       = int(self._msg.get("contentType", 0))
+        raw_text = self._msg.get("text") or ""
         if ct != 0:
-            text = _preview(self._msg)
-        elif raw_text:
-            text = str(raw_text)
-        elif self._msg.get("chunks"):
-            text = "🔐 [E2EE]"  # 加密訊息，無法顯示明文
-        else:
-            text = ""
+            return _preview(self._msg)
+        if raw_text:
+            return str(raw_text)
+        if self._msg.get("chunks"):
+            return "🔐 [E2EE]"
+        return ""
+
+    def compose(self) -> ComposeResult:
+        text       = self._build_text()
         ts         = _ts(self._msg.get("createdTime", 0))
         sender_mid = self._msg.get("from", "")
         if self.is_mine:
-            return Align.right(Text.assemble(
+            bubble = Text.assemble(
                 (" ", ""), (f" {text} ", "black on green"),
                 (" ", ""), ("  ", ""), (ts, "dim"),
-            ))
-        color  = _sender_style(sender_mid)
-        sender = self._contacts.get(sender_mid, "")
-        bg     = f"black on {color}"
-        parts: list = []
-        if sender:
-            parts.append((f" {sender} ", f"bold {bg}"))
-            parts.append(("\n", ""))
-        parts += [(" ", ""), (f" {text} ", bg), (" ", ""), ("  ", ""), (ts, "dim")]
-        return Text.assemble(*parts)
+            )
+            yield Static(Align.right(bubble))
+        else:
+            color  = _sender_style(sender_mid)
+            sender = self._contacts.get(sender_mid, "")
+            bg     = f"black on {color}"
+            parts: list = []
+            if sender:
+                parts.append((f" {sender} ", f"bold {bg}"))
+                parts.append(("\n", ""))
+            parts += [(" ", ""), (f" {text} ", bg), (" ", ""), ("  ", ""), (ts, "dim")]
+            yield Static(Text.assemble(*parts))
 
 
 # ── 3. ChatItem ───────────────────────────────────────────────────
@@ -288,6 +291,7 @@ Screen { layout: vertical; }
 ChatItem { height: 4; padding: 0 1; }
 ChatItem.--highlight { background: $primary-darken-1; }
 MessageItem { height: auto; padding: 0 1; }
+MessageItem > Static { width: 1fr; }
 """
 
 class TuiApp(App):
