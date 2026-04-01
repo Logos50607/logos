@@ -176,16 +176,6 @@ def _name_ts_row(name: str, ts: str) -> Text:
     return Text.assemble((name, "bold white"), ("  ", ""), (ts, "dim"))
 
 
-import re as _re
-_ASCII_CJK = _re.compile(r'([\x00-\x7F])\s+([\u2E80-\u9FFF\uF900-\uFAFF])')
-_CJK_ASCII = _re.compile(r'([\u2E80-\u9FFF\uF900-\uFAFF])\s+([\x00-\x7F])')
-_NBSP = '\xa0'
-
-def _fix_wrap(text: str) -> str:
-    """把 ASCII↔CJK 之間的空格換成不換行空格，避免 Rich 在此斷行。"""
-    text = _ASCII_CJK.sub(lambda m: m.group(1) + _NBSP + m.group(2), text)
-    text = _CJK_ASCII.sub(lambda m: m.group(1) + _NBSP + m.group(2), text)
-    return text
 
 
 # ── 2. MessageItem ────────────────────────────────────────────────
@@ -233,14 +223,14 @@ class MessageItem(ListItem):
             yield Static(Align.right(_name_ts_row(name, ts)), classes="name-row")
             with Horizontal(classes="bubble-row"):
                 yield Static("", classes="mine-spacer")
-                yield Static(Text(_fix_wrap(text)), classes="bubble")
+                yield Static(Text(text), classes="bubble")
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, sender_mid[:10])
             css_bg = _css_color(color)
             if sender:
                 yield Static(_name_ts_row(sender, ts), classes="name-row")
-            text_s = Static(Text(_fix_wrap(text)), classes="bubble")
+            text_s = Static(Text(text), classes="bubble")
             text_s.styles.background = css_bg
             text_s.styles.color = "black"
             yield text_s
@@ -332,7 +322,7 @@ ChatItem { height: 4; padding: 0 1; }
 ChatItem.--highlight { background: $primary-darken-1; }
 MessageItem { height: auto; }
 .name-row { width: 1fr; }
-.bubble-row { height: auto; }
+.bubble-row { height: auto; width: 1fr; }
 .mine-spacer { width: 1fr; }
 MessageItem.--mine .bubble { background: #00af00; color: black; }
 .bubble { padding: 0 1; width: 85%; }
