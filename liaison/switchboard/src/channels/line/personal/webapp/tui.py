@@ -1,8 +1,8 @@
 # /// script
-# dependencies = ["textual", "playwright", "cryptography"]
+# dependencies = ["textual", "cryptography"]
 # ///
 """
-tui.py - LINE 個人帳號 Terminal UI
+tui.py - LINE 個人帳號 Terminal UI（純 file-based，資料由 sync.py daemon 提供）
 
 用法: uv run tui.py
 操作:
@@ -19,7 +19,7 @@ tui.py - LINE 個人帳號 Terminal UI
 # 3. ChatItem widget
 # 4. ContactPickerScreen modal
 # 5. TuiApp：compose / on_mount / 事件處理
-# 6. TuiApp：非同步任務 (cdp / preload / send / poll / contacts / refresh / unsend)
+# 6. TuiApp：非同步任務 (send / poll / check_files)
 # 7. TuiApp：渲染 (rebuild_list / show_messages / append_message)
 
 import ast, json, sys, time
@@ -44,19 +44,11 @@ _MSGS    = _DATA / "messages.json"
 _FRIENDS = _DATA / "friends.json"
 _GROUPS  = _DATA / "groups.json"
 _PUBKEYS = _DATA / "pubkeys.json"
+_OUTBOX  = _DATA / "outbox.json"
+_STATE   = _DATA / "state.json"
 _LOG     = _DATA / "tui.log"
 
 import traceback as _traceback
-
-def _is_context_dead(e: Exception) -> bool:
-    """判斷是否為 Playwright page context 被摧毀的錯誤。"""
-    msg = str(e)
-    return any(k in msg for k in (
-        "Execution context was destroyed",
-        "Target page, context or browser has been closed",
-        "Connection closed",
-    ))
-
 
 def _log_exc(tag: str) -> None:
     """將當前例外的完整 traceback 附加到 tui.log。"""
@@ -173,12 +165,6 @@ def _save_contacts(friends: dict, groups: dict) -> None:
 
 def _load_messages() -> dict:
     return json.loads(_MSGS.read_text()) if _MSGS.exists() else {}
-
-def _save_messages(data: dict) -> None:
-    """背景執行寫檔，避免大型 JSON 擋住 event loop。"""
-    import threading
-    content = json.dumps(data, ensure_ascii=False, indent=2)
-    threading.Thread(target=lambda: _MSGS.write_text(content), daemon=True).start()
 
 
 # ── 2. MessageItem ────────────────────────────────────────────────
@@ -348,21 +334,14 @@ class TuiApp(App):
         self._data:          dict           = {}
         self._contacts:      dict           = {}
         self._my_mid:        str | None     = None
-        self._page                          = None
-        self._connected:     bool           = False
+        self._msgs_mtime:    float          = 0.0
         self._order:         list[str]      = []
         self._unread:        dict[str, set] = {}
-        self._token:         str | None     = None
-        self._token_ts:      float          = 0.0
-        self._pw                            = None
-        self._browser                       = None
         self._sidebar_chats: list           = []   # 完整排序後的 (mid, ts) 清單
         self._sidebar_shown: int            = 0    # 已顯示幾筆
         self._chat_shown:    dict[str, int] = {}   # 各聊天室目前顯示幾則
         self._reply_to:      dict | None    = None  # 目前選取要回覆的訊息
-        self._ltsm_cache:    dict           = {}    # {receiver_key_id: my_ltsm_id}
-        self._chan_cache:    dict           = {}    # {(my_ltsm_id, sender_mid, s_key_id): channel_id}
-        self._pub_store:     dict           = {}    # {key_id_str: pub_b64} 扁平，持久化
+        self._contacts_mtime: float        = 0.0
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -378,17 +357,22 @@ class TuiApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.title     = "LINE Personal"
-        self.sub_title = "連線中…"
+        self.title = "LINE Personal"
         with _LOG.open("a") as f:
             f.write(f"\n[{datetime.now()}] ── TUI 啟動 ──\n")
         _migrate_legacy()
         self._data     = _load_messages()
         self._contacts = _load_contacts()
-        self._pub_store = json.loads(_PUBKEYS.read_text()) if _PUBKEYS.exists() else {}
+        self._msgs_mtime = _MSGS.stat().st_mtime if _MSGS.exists() else 0.0
+        self._contacts_mtime = max(
+            (_FRIENDS.stat().st_mtime if _FRIENDS.exists() else 0.0),
+            (_GROUPS.stat().st_mtime  if _GROUPS.exists()  else 0.0),
+        )
+        if _STATE.exists():
+            self._my_mid = json.loads(_STATE.read_text()).get("my_mid")
+        self._update_status()
         self._rebuild_list()
-        self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
-        self.set_interval(10, self._poll)
+        self.set_interval(5, self._check_files)
 
     # ── 事件處理 ─────────────────────────────────────────────────
 
@@ -399,8 +383,6 @@ class TuiApp(App):
             self._unread.pop(item.mid, None)
             self._show_messages(item.mid)
             self.query_one("#input", Input).focus()
-            if self._connected:
-                self.run_worker(self._decrypt_chat(item.mid), name="decrypt")
         elif isinstance(item, MessageItem):
             self._reply_to = item._msg
             preview = str(item._msg.get("text", _preview(item._msg)))[:50]
@@ -409,14 +391,12 @@ class TuiApp(App):
             bar.display = True
             self.query_one("#input", Input).focus()
 
-    async def on_input_submitted(self, ev: Input.Submitted) -> None:
+    def on_input_submitted(self, ev: Input.Submitted) -> None:
         text = ev.value.strip()
         if not text or not self.current_chat:
             return
         ev.input.clear()
-        if not self._connected:
-            self.notify("尚未連線，請稍候", severity="warning"); return
-        self.run_worker(self._send(self.current_chat, text), name="send")
+        self._send(self.current_chat, text)
 
     def action_focus_list(self) -> None:
         if self._reply_to is not None:
@@ -431,8 +411,13 @@ class TuiApp(App):
     def action_focus_messages(self) -> None: self.query_one("#messages").focus()
 
     def action_refresh(self) -> None:
+        self._data     = _load_messages()
+        self._contacts = _load_contacts()
+        self._msgs_mtime = _MSGS.stat().st_mtime if _MSGS.exists() else 0.0
+        self._update_status()
+        self._rebuild_list()
         if self.current_chat:
-            self.run_worker(self._refresh_chat(self.current_chat), name="refresh")
+            self._show_messages(self.current_chat)
 
     def action_new_chat(self) -> None:
         self.push_screen(
@@ -447,8 +432,6 @@ class TuiApp(App):
         self._rebuild_list()
         self._show_messages(mid)
         self.query_one("#input", Input).focus()
-        if self._connected:
-            self.run_worker(self._refresh_chat(mid), name="refresh-pick")
 
     def action_quit(self) -> None:
         """直接強制退出，kill 整個 process group（Python + uv 同時死，shell 立刻拿回 terminal）。"""
@@ -472,220 +455,109 @@ class TuiApp(App):
         # Kill 整個 process group（含 uv），shell 立刻拿回 terminal
         os.killpg(os.getpgrp(), signal.SIGKILL)
 
-    # ── 非同步任務 ───────────────────────────────────────────────
+    # ── 任務（純 file-based，無 CDP）────────────────────────────
 
-    async def _get_token(self) -> str:
-        """快取 token，1 小時內重用，過期才 reload 重取。"""
-        if self._token and time.time() - self._token_ts < 3600:
-            return self._token
-        from gw_client import get_access_token
-        self._token    = await get_access_token(self._page)
-        self._token_ts = time.time()
-        return self._token
-
-    async def _connect_cdp(self) -> None:
-        try:
-            from playwright.async_api import async_playwright
-            from gw_client import CDP_URL, find_ext_page
-            from send_api import get_my_info
-            self._pw      = await async_playwright().start()
-            self._browser = await self._pw.chromium.connect_over_cdp(CDP_URL)
-            self._page    = find_ext_page(self._browser.contexts[0])
-            self._my_mid, _ = await get_my_info(self._page)
-            self._connected  = True
-            self.sub_title   = "已連線"
-            self.notify("已連線到 LINE ✓")
-            # 從 IndexedDB 載入歷史 E2EE 公鑰（含對方已輪換的舊 key）
-            try:
-                from encrypt_e2ee import load_idb_pubkeys
-                idb_keys = await load_idb_pubkeys(self._page)
-                if idb_keys:
-                    self._pub_store.update(idb_keys)
-                    _PUBKEYS.write_text(json.dumps(self._pub_store, ensure_ascii=False))
-            except Exception:
-                _log_exc("load_idb_pubkeys 失敗")
-            self.run_worker(self._preload_recent(), name="preload")
-            self.run_worker(self._sync_contacts(), name="contacts")
-        except Exception as e:
-            self.notify(f"連線失敗: {e}", severity="error")
-            _log_exc("connect_cdp 失敗")
-
-    async def _preload_recent(self) -> None:
-        """用 getMessageBoxes 一次取得全部 active 聊天室及最後訊息。"""
-        try:
-            from fetch_messages import fetch_message_boxes
-            token = await self._get_token()
-            self.sub_title = "同步聊天室…"
-            boxes = await fetch_message_boxes(self._page, token, last_msgs=30)
-            new_count = 0
-            for box in boxes:
-                mid  = box["id"]
-                msgs = box.get("lastMessages") or []
-                if mid not in self._data:
-                    new_count += 1
-                if msgs:
-                    # 用 id 去重後合併（新訊息優先，舊的不覆蓋）
-                    existing = {m["id"]: m for m in self._data.get(mid, [])}
-                    for m in msgs:
-                        existing.setdefault(m["id"], m)
-                    self._data[mid] = list(existing.values())
-                else:
-                    self._data.setdefault(mid, [])
-            _save_messages(self._data)
-            self._rebuild_list()
-            self.sub_title = "已連線"
-            if new_count:
-                self.notify(f"新增 {new_count} 個聊天室 ✓")
-        except Exception:
-            self.sub_title = "已連線"
-            _log_exc("preload 失敗")
-        # 連線後批次解密所有待解密訊息
-        self.run_worker(self._decrypt_all_pending(), name="decrypt-all")
-
-    async def _decrypt_all_pending(self) -> None:
-        """解密所有聊天室的待解密 E2EE 訊息（啟動時一次處理）。"""
-        if not self._connected or not self._my_mid:
+    def _update_status(self) -> None:
+        """從 state.json 讀取 daemon 狀態，更新 sub_title。"""
+        if not _STATE.exists():
+            self.sub_title = "等待 sync.py 啟動…"
             return
         try:
-            pending_mids = [mid for mid, msgs in self._data.items()
-                            if any(m.get("chunks") and m.get("text") is None
-                                   and not m.get("_decrypt_skip")
-                                   for m in msgs)]
-            if not pending_mids:
-                return
-            self.sub_title = f"解密中… (0/{len(pending_mids)})"
-            for i, mid in enumerate(pending_mids):
-                await self._decrypt_chat(mid)
-                self.sub_title = f"解密中… ({i+1}/{len(pending_mids)})"
-            self.sub_title = "已連線"
-        except Exception:
-            self.sub_title = "已連線"
-            _log_exc("decrypt_all_pending 失敗")
-
-    async def _send(self, mid: str, text: str) -> None:
-        from send_api import send_e2ee_text
-        reply_id = self._reply_to["id"] if self._reply_to else None
-        try:
-            result = await send_e2ee_text(self._page, mid, text, reply_to_id=reply_id)
-        except Exception as e:
-            if _is_context_dead(e):
-                self._connected = False
-                self.sub_title = "連線中斷，重連中…"
-                self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
-                self.notify("連線中斷，請重連後再試", severity="error")
+            state = json.loads(_STATE.read_text())
+            age   = int(time.time()) - int(state.get("ts", 0))
+            if age < 30:
+                self.sub_title = f"daemon 正常（{age}s 前）"
             else:
-                self.notify(f"發送失敗: {e}", severity="error")
-            return
-        if result.get("ok"):
-            msg: dict = {"from": self._my_mid or "", "to": mid,
-                         "contentType": 0, "text": text,
-                         "createdTime": str(int(time.time() * 1000)),
-                         "id": f"local-{result['seq']}"}
-            if reply_id:
-                msg["relatedMessageId"]    = reply_id
-                msg["messageRelationType"] = 3
-            # 清除回覆狀態
-            self._reply_to = None
-            bar = self.query_one("#reply-bar", Label)
-            bar.update("")
-            bar.display = False
-            self._data.setdefault(mid, []).append(msg)
-            _save_messages(self._data)
-            if self.current_chat == mid:
-                self._append_message(msg, mid)
-        else:
-            err = result.get('error', '(unknown)')
-            with _LOG.open("a") as _f:
-                _f.write(f"\n[{datetime.now()}] _send 失敗: {err}\n")
-            self.notify(f"發送失敗: {err}", severity="error")
+                self.sub_title = f"daemon 無回應（{age}s 前）"
+        except Exception:
+            self.sub_title = "state.json 讀取失敗"
 
-    async def _poll(self) -> None:
-        if not self._connected: return
-        self.run_worker(self._fetch_new(), name="poll")
-
-    async def _fetch_new(self) -> None:
-        """用 getMessageBoxes 篩出有新訊息的聊天室，再逐一抓完整更新。"""
+    async def _check_files(self) -> None:
+        """每 5 秒檢查檔案是否有更新，有則重新載入。"""
         try:
-            from fetch_messages import fetch_message_boxes, fetch_chat_messages
-            token = await self._get_token()
-            boxes = await fetch_message_boxes(self._page, token, last_msgs=1)
+            # 檢查聯絡人
+            new_ct = max(
+                (_FRIENDS.stat().st_mtime if _FRIENDS.exists() else 0.0),
+                (_GROUPS.stat().st_mtime  if _GROUPS.exists()  else 0.0),
+            )
+            if new_ct > self._contacts_mtime:
+                self._contacts_mtime = new_ct
+                self._contacts = _load_contacts()
+                self._rebuild_list()
 
-            # 找出 lastDeliveredMessageId 比本地最新訊息 id 還新的聊天室
-            changed = False
-            for box in boxes:
-                mid = box["id"]
-                box_last_id = (box.get("lastDeliveredMessageId") or {}).get("messageId")
-                local_msgs  = self._data.get(mid, [])
-                local_ids   = {m["id"] for m in local_msgs}
-                if not box_last_id or box_last_id in local_ids:
+            # 檢查訊息
+            new_mt = _MSGS.stat().st_mtime if _MSGS.exists() else 0.0
+            if new_mt <= self._msgs_mtime:
+                self._update_status()
+                return
+            self._msgs_mtime = new_mt
+            old_ids = {mid: {m["id"] for m in msgs}
+                       for mid, msgs in self._data.items()}
+            self._data = _load_messages()
+
+            # 找出新訊息，發通知 & 更新 unread
+            for mid, msgs in self._data.items():
+                known = old_ids.get(mid, set())
+                new   = [m for m in msgs if m["id"] not in known]
+                if not new:
                     continue
-                known = {m["id"] for m in local_msgs}
-                fresh = await fetch_chat_messages(self._page, token, mid, 10)
-                new   = [m for m in fresh if m["id"] not in known]
-                if not new: continue
-                self._data.setdefault(mid, []).extend(new)
                 self._unread.setdefault(mid, set()).update(m["id"] for m in new)
-                changed = True
-                print("\a", end="", flush=True)
-                label = self._contacts.get(mid, mid[:12] + "…")
-                self.notify(f"💬 {label}: {_preview(new[-1])}")
-                self._rebuild_list()
-                if self.current_chat == mid:
-                    for m in sorted(new, key=lambda x: int(x.get("createdTime", 0))):
-                        self._append_message(m, mid)
-                # 若有 E2EE 訊息，背景解密
-                if any(m.get("chunks") and m.get("text") is None for m in new):
-                    self.run_worker(self._decrypt_chat(mid), name=f"decrypt-{mid}")
-            if changed:
-                _save_messages(self._data)
-        except Exception as e:
-            if _is_context_dead(e):
-                self._connected = False
-                self.sub_title = "連線中斷，重連中…"
-                self.run_worker(self._connect_cdp(), exclusive=True, name="cdp")
-            else:
-                _log_exc("fetch_new 失敗")
+                if mid != self.current_chat:
+                    print("\a", end="", flush=True)
+                    label = self._contacts.get(mid, mid[:12] + "…")
+                    self.notify(f"💬 {label}: {_preview(new[-1])}")
 
-    async def _sync_contacts(self) -> None:
-        """只取 messages.json 中本地尚無名稱的 mid，背景執行不阻塞啟動。"""
-        try:
-            from fetch_contacts import _fetch_names, _fetch_group_names
-            token = await self._get_token()
-            missing = [mid for mid in self._data if mid not in self._contacts]
-            if not missing:
-                return
-            friend_ids = [m for m in missing if m.startswith("U")]
-            group_ids  = [m for m in missing if m.startswith("C") or m.startswith("R")]
-            new: dict = {}
-            if friend_ids:
-                new.update(await _fetch_names(self._page, token, friend_ids))
-            if group_ids:
-                new.update(await _fetch_group_names(self._page, token, group_ids))
-            if new:
-                self._contacts.update(new)
-                friends = {m: n for m, n in self._contacts.items() if m.startswith("U")}
-                groups  = {m: n for m, n in self._contacts.items()
-                           if m.startswith("C") or m.startswith("R")}
-                _save_contacts(friends, groups)
-                self._rebuild_list()
-                self.notify(f"已補齊 {len(new)} 個聯絡人名稱")
+            self._rebuild_list()
+            if self.current_chat:
+                self._show_messages(self.current_chat)
+            self._update_status()
         except Exception:
-            _log_exc("sync_contacts 失敗")
+            _log_exc("check_files 失敗")
 
-    async def _refresh_chat(self, mid: str) -> None:
-        if not self._connected: return
+    def _send(self, mid: str, text: str) -> None:
+        """寫入 outbox.json（由 sync.py daemon 發送），樂觀顯示。"""
+        import uuid
+        local_id = f"local-{uuid.uuid4().hex[:8]}"
+        reply_id = self._reply_to["id"] if self._reply_to else None
+
+        # 寫入 outbox
         try:
-            from fetch_messages import fetch_chat_messages
-            token = await self._get_token()
-            msgs  = await fetch_chat_messages(self._page, token, mid, 50)
-            self._data[mid] = msgs
-            _save_messages(self._data)
-            self._show_messages(mid)
+            outbox = json.loads(_OUTBOX.read_text()) if _OUTBOX.exists() else []
+            entry: dict = {"local_id": local_id, "to": mid, "text": text}
+            if reply_id:
+                entry["reply_to_id"] = reply_id
+            outbox.append(entry)
+            tmp = _OUTBOX.with_suffix(".tmp")
+            tmp.write_text(json.dumps(outbox, ensure_ascii=False))
+            tmp.rename(_OUTBOX)
         except Exception as e:
-            self.notify(f"重新整理失敗: {e}", severity="error")
+            self.notify(f"outbox 寫入失敗: {e}", severity="error")
+            _log_exc("send outbox 寫入失敗")
+            return
+
+        # 樂觀顯示（不寫 messages.json，等 daemon 回寫）
+        msg: dict = {
+            "from": self._my_mid or "", "to": mid,
+            "contentType": 0, "text": text,
+            "createdTime": str(int(time.time() * 1000)),
+            "id": local_id,
+        }
+        if reply_id:
+            msg["relatedMessageId"]    = reply_id
+            msg["messageRelationType"] = 3
+
+        # 清除回覆狀態
+        self._reply_to = None
+        bar = self.query_one("#reply-bar", Label)
+        bar.update("")
+        bar.display = False
+
+        self._data.setdefault(mid, []).append(msg)
+        if self.current_chat == mid:
+            self._append_message(msg, mid)
 
     def action_unsend(self) -> None:
-        if not self._connected or not self.current_chat:
+        if not self.current_chat:
             return
         lv   = self.query_one("#messages", ListView)
         item = lv.highlighted_child
@@ -695,64 +567,18 @@ class TuiApp(App):
         if not item.is_mine:
             self.notify("只能收回自己的訊息", severity="warning")
             return
-        self.run_worker(self._do_unsend(item.msg_id), name="unsend")
-
-    async def _do_unsend(self, msg_id: str) -> None:
+        msg_id = item.msg_id
         try:
-            from send_api import unsend_message
-            result = await unsend_message(self._page, msg_id)
-            if result.get("ok"):
-                mid = self.current_chat
-                self._data[mid] = [m for m in self._data.get(mid, [])
-                                   if m.get("id") != msg_id]
-                _save_messages(self._data)
-                self._show_messages(mid)
-                self.notify("已收回訊息")
-            else:
-                self.notify(f"收回失敗: {result.get('error')}", severity="error")
+            outbox = json.loads(_OUTBOX.read_text()) if _OUTBOX.exists() else []
+            outbox.append({"action": "unsend", "msg_id": msg_id,
+                           "mid": self.current_chat})
+            tmp = _OUTBOX.with_suffix(".tmp")
+            tmp.write_text(json.dumps(outbox, ensure_ascii=False))
+            tmp.rename(_OUTBOX)
+            self.notify("已排入收回，等待 daemon 執行")
         except Exception as e:
             self.notify(f"收回失敗: {e}", severity="error")
-            _log_exc("unsend 失敗")
-
-    async def _decrypt_chat(self, mid: str) -> None:
-        """解密該聊天室所有未解密的 E2EE 訊息，解完後重繪。"""
-        if not self._connected or not self._my_mid:
-            return
-        try:
-            from send_api import decrypt_e2ee_message
-            token   = await self._get_token()
-            msgs    = self._data.get(mid, [])
-            pending = [m for m in msgs
-                       if (int(m.get("contentType", 0)) == 0
-                           and m.get("text") is None
-                           and m.get("chunks")
-                           and not m.get("_decrypt_skip"))]
-            if not pending:
-                return
-            with _LOG.open("a") as f:
-                f.write(f"[{datetime.now()}] decrypt_chat {mid[:12]} 開始，{len(pending)} 則待解密\n")
-            ok = fail = 0
-            for m in pending:
-                text = await decrypt_e2ee_message(
-                    self._page, m, self._my_mid, token,
-                    self._ltsm_cache, self._chan_cache, self._pub_store,
-                    debug_log=_LOG if ok == 0 and fail <= 5 else None,  # 只診斷前幾則
-                )
-                if text is not None:
-                    m["text"] = text
-                    ok += 1
-                else:
-                    fail += 1
-            with _LOG.open("a") as f:
-                f.write(f"[{datetime.now()}] decrypt_chat 結束：成功 {ok}，失敗 {fail}\n")
-            # pub_store 可能新增了 key → 持久化
-            _PUBKEYS.write_text(json.dumps(self._pub_store, ensure_ascii=False))
-            if ok:
-                _save_messages(self._data)
-                if self.current_chat == mid:
-                    self._show_messages(mid)
-        except Exception:
-            _log_exc("decrypt_chat 失敗")
+            _log_exc("unsend outbox 寫入失敗")
 
     # ── 渲染 ─────────────────────────────────────────────────────
 
@@ -810,24 +636,9 @@ class TuiApp(App):
             lv.append(MessageItem(m, self._my_mid, self._contacts))
         lv.scroll_end(animate=False)
 
-    async def action_load_older(self) -> None:
+    def action_load_older(self) -> None:
         mid = self.current_chat
         if not mid: return
-        msgs = sorted(self._data.get(mid, []), key=lambda m: int(m.get("createdTime", 0)))
-        if not msgs: return
-        if self._connected:
-            from fetch_messages import _get_previous
-            try:
-                token = await self._get_token()
-                prev  = await _get_previous(self._page, token, mid, msgs[0], 30)
-                if prev:
-                    known = {m["id"] for m in self._data[mid]}
-                    new   = [m for m in prev if m["id"] not in known]
-                    if new:
-                        self._data[mid] = new + self._data[mid]
-                        _save_messages(self._data)
-            except Exception:
-                _log_exc("load_older 失敗")
         self._chat_shown[mid] = self._chat_shown.get(mid, 80) + 30
         self._show_messages(mid)
 

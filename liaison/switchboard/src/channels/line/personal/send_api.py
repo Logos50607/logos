@@ -135,10 +135,16 @@ def _group_members_from_history(group_mid: str, my_mid: str) -> list[str]:
 
 
 async def send_e2ee_group_text(page, group_mid: str, text: str,
-                                reply_to_id: str | None = None) -> dict:
+                                reply_to_id: str | None = None,
+                                _token: str | None = None,
+                                _my_mid: str | None = None,
+                                _sender_key_id: int | None = None) -> dict:
     """對群組每個成員各加密一份並發送；回傳 {ok, seq} 或 {error}。"""
-    token = await get_access_token(page)
-    my_mid, sender_key_id = await get_my_info(page)
+    token = _token or await get_access_token(page)
+    my_mid = _my_mid
+    sender_key_id = _sender_key_id
+    if my_mid is None or sender_key_id is None:
+        my_mid, sender_key_id = await get_my_info(page)
     members = _group_members_from_history(group_mid, my_mid)
     if not members:
         return {"error": "找不到群組成員（訊息歷史為空）"}
@@ -170,16 +176,23 @@ async def send_e2ee_group_text(page, group_mid: str, text: str,
 
 
 async def send_e2ee_text(page, to: str, text: str,
-                         reply_to_id: str | None = None) -> dict:
+                         reply_to_id: str | None = None,
+                         _token: str | None = None,
+                         _my_mid: str | None = None,
+                         _sender_key_id: int | None = None) -> dict:
     """發送 E2EE V2 訊息；群組自動分派給每個成員。"""
     if not to.startswith("U"):
-        return await send_e2ee_group_text(page, to, text, reply_to_id)
-
+        return await send_e2ee_group_text(page, to, text, reply_to_id,
+                                          _token=_token, _my_mid=_my_mid,
+                                          _sender_key_id=_sender_key_id)
     print(">>> 取得 token...", flush=True)
-    token = await get_access_token(page)
+    token = _token or await get_access_token(page)
 
     print(">>> 取得我的 key...", flush=True)
-    my_mid, sender_key_id = await get_my_info(page)
+    my_mid = _my_mid
+    sender_key_id = _sender_key_id
+    if my_mid is None or sender_key_id is None:
+        my_mid, sender_key_id = await get_my_info(page)
     print(f"    mid={my_mid[:20]}... senderKeyId={sender_key_id}", flush=True)
 
     print(f">>> 取得 {to[:20]} 的公鑰...", flush=True)
@@ -330,9 +343,9 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
 
 _PATH_UNSEND = "/api/talk/thrift/Talk/TalkService/unsendMessage"
 
-async def unsend_message(page, msg_id: str) -> dict:
+async def unsend_message(page, msg_id: str, _token: str | None = None) -> dict:
     """收回（撤回）已發送的訊息。"""
-    token = await get_access_token(page)
+    token = _token or await get_access_token(page)
     body_obj = [{"messageId": msg_id}]
     body_str = json.dumps(body_obj)
     hmac = await compute_hmac(page, token, _PATH_UNSEND, body_str)
