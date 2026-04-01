@@ -494,9 +494,8 @@ class TuiApp(App):
                     _PUBKEYS.write_text(json.dumps(self._pub_store, ensure_ascii=False))
             except Exception:
                 _log_exc("load_idb_pubkeys 失敗")
-            # 先同步聯絡人名稱，再開始預載（確保名稱已就緒）
-            await self._sync_contacts()
             self.run_worker(self._preload_recent(), name="preload")
+            self.run_worker(self._sync_contacts(), name="contacts")
         except Exception as e:
             self.notify(f"連線失敗: {e}", severity="error")
             _log_exc("connect_cdp 失敗")
@@ -620,10 +619,20 @@ class TuiApp(App):
             _log_exc("fetch_new 失敗")
 
     async def _sync_contacts(self) -> None:
+        """只取 messages.json 中本地尚無名稱的 mid，背景執行不阻塞啟動。"""
         try:
-            from fetch_contacts import fetch_contacts
-            self.sub_title = "同步聯絡人…"
-            new = await fetch_contacts(self._page, await self._get_token())
+            from fetch_contacts import _fetch_names, _fetch_group_names
+            token = await self._get_token()
+            missing = [mid for mid in self._data if mid not in self._contacts]
+            if not missing:
+                return
+            friend_ids = [m for m in missing if m.startswith("U")]
+            group_ids  = [m for m in missing if m.startswith("C") or m.startswith("R")]
+            new: dict = {}
+            if friend_ids:
+                new.update(await _fetch_names(self._page, token, friend_ids))
+            if group_ids:
+                new.update(await _fetch_group_names(self._page, token, group_ids))
             if new:
                 self._contacts.update(new)
                 friends = {m: n for m, n in self._contacts.items() if m.startswith("U")}
@@ -631,16 +640,8 @@ class TuiApp(App):
                            if m.startswith("C") or m.startswith("R")}
                 _save_contacts(friends, groups)
                 self._rebuild_list()
-                self.notify(f"已載入 {len(friends)} 位好友、{len(groups)} 個群組")
-            else:
-                msg = "聯絡人同步回傳 0 筆"
-                self.notify(msg, severity="warning")
-                with _LOG.open("a") as f:
-                    f.write(f"[{datetime.now()}] {msg}\n")
-            self.sub_title = "已連線"
-        except Exception as e:
-            self.sub_title = "已連線"
-            self.notify(f"聯絡人同步失敗: {e}", severity="error")
+                self.notify(f"已補齊 {len(new)} 個聯絡人名稱")
+        except Exception:
             _log_exc("sync_contacts 失敗")
 
     async def _refresh_chat(self, mid: str) -> None:
