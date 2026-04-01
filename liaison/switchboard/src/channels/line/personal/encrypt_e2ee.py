@@ -67,8 +67,9 @@ _FIND_KEY_JS = """([targetKeyId]) => new Promise((resolve) => {
     const handler = (evt) => {
         const d = evt.data;
         if (!d || d.sandboxId !== sandboxId) return;
-        if (d.type === "response" && typeof d.data === "number") {
-            if (d.data < 1000) return;  // stale ltsmKeyId response，忽略
+        if (d.type === "response") {
+            // 非數字或小整數（stale msg）→ 推進到下一 slot
+            if (typeof d.data !== "number" || d.data < 1000) { next(); return; }
             if (d.data === targetKeyId) {
                 window.removeEventListener("message", handler);
                 resolve({ok: currentId});
@@ -81,8 +82,8 @@ _FIND_KEY_JS = """([targetKeyId]) => new Promise((resolve) => {
     };
 
     window.addEventListener("message", handler);
-    setTimeout(next, 40);  // 40ms drain
-    setTimeout(() => { window.removeEventListener("message", handler); resolve({error: "scan timeout"}); }, 10000);
+    setTimeout(next, 100);  // 100ms drain 確保舊訊息散盡
+    setTimeout(() => { window.removeEventListener("message", handler); resolve({error: "scan timeout"}); }, 15000);
 })"""
 
 _CREATE_CHANNEL_JS = """([keyId, pubB64]) => new Promise((resolve) => {
@@ -105,6 +106,30 @@ _CREATE_CHANNEL_JS = """([keyId, pubB64]) => new Promise((resolve) => {
         window.addEventListener("message", handler);
         iframe.contentWindow.postMessage({sandboxId, type: "request",
             data: {command: "e2eekey_create_channel", ltsmKeyId: keyId, payload}}, "*");
+        setTimeout(() => resolve({error: "timeout"}), 8000);
+    }, 40);
+})"""
+
+_DECRYPT_V1_JS = """([chId, rawB64]) => new Promise((resolve) => {
+    // E2EE V1：payload 是 raw bytes（c0+c1+c2），不含 from/to 等欄位
+    const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
+    if (!iframe) { resolve({error: "no iframe"}); return; }
+    const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
+    const payload = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
+    setTimeout(() => {
+        const handler = (evt) => {
+            const d = evt.data;
+            if (d && d.sandboxId === sandboxId &&
+                (d.type === "response" || d.type === "error")) {
+                if (d.type === "response" && !(d.data instanceof ArrayBuffer) && !ArrayBuffer.isView(d.data)) return;
+                window.removeEventListener("message", handler);
+                if (d.type === "error") { resolve({error: String(d.data)}); return; }
+                resolve({ok: new TextDecoder().decode(new Uint8Array(d.data))});
+            }
+        };
+        window.addEventListener("message", handler);
+        iframe.contentWindow.postMessage({sandboxId, type: "request",
+            data: {command: "e2eechannel_decrypt_v1", ltsmKeyId: chId, payload}}, "*");
         setTimeout(() => resolve({error: "timeout"}), 8000);
     }, 40);
 })"""
@@ -258,16 +283,32 @@ async def load_idb_pubkeys(page) -> dict:
     return result or {}
 
 
+def _detect_e2ee_version(chunks: list) -> int:
+    """
+    從 chunks[0] 長度判斷 E2EE 版本。
+    V1（mL 打包）: chunks[0] = 8 bytes（12 base64 chars）
+    V2（vL 打包）: chunks[0] = 16 bytes（24 base64 chars）
+    """
+    import base64 as _b64
+    try:
+        c0_len = len(_b64.b64decode(chunks[0] + "=="))
+    except Exception:
+        return 2
+    return 1 if c0_len <= 8 else 2
+
+
 async def decrypt_e2ee_chunks(page,
                                chunks: list,
                                from_mid: str, to_mid: str,
                                content_type: int,
                                channel_ltsm_id: int) -> str | None:
     """
-    用已建立的 channel 解密 E2EE V2 chunks，回傳明文 JSON 字串或 None。
+    用已建立的 channel 解密 E2EE chunks（自動偵測 V1/V2），回傳明文 JSON 字串或 None。
 
-    chunks = [iv_b64, ct_b64, seqKey_b64, senderKeyId_b64, receiverKeyId_b64]
-    （與 encrypt_message 輸出格式相同）
+    V1 chunks = [nonce8_b64, ct_b64, iv16_b64, senderKeyId_b64, receiverKeyId_b64]
+      → payload = raw bytes(c0+c1+c2)，呼叫 e2eechannel_decrypt_v1
+    V2 chunks = [iv16_b64, ct_b64, seqKey12_b64, senderKeyId_b64, receiverKeyId_b64]
+      → reconstruct IV+seqKey+ct，呼叫 e2eechannel_decrypt_v2
     channel_ltsm_id = make_decrypt_channel() 回傳值
     """
     import base64 as _b64, struct as _struct
@@ -276,15 +317,34 @@ async def decrypt_e2ee_chunks(page,
     try:
         s_key_id = _struct.unpack_from('>I', _b64.b64decode(chunks[3])[:4])[0]
         r_key_id = _struct.unpack_from('>I', _b64.b64decode(chunks[4])[:4])[0]
-        # 還原：IV(16) + seqKeyId(12) + ciphertext = 原始 encrypt_v2 輸出
-        enc_b64  = _b64.b64encode(
-            _b64.b64decode(chunks[0]) + _b64.b64decode(chunks[2]) + _b64.b64decode(chunks[1])
-        ).decode()
     except Exception:
         return None
-    r = await page.evaluate(_DECRYPT_V2_JS,
-                            [channel_ltsm_id, from_mid, to_mid,
-                             s_key_id, r_key_id, content_type, enc_b64])
-    if 'error' in r:
-        raise RuntimeError(f"decrypt_v2 sandbox error: {r['error']}")
-    return r.get('ok')
+
+    version = _detect_e2ee_version(chunks)
+
+    if version == 1:
+        # V1: payload = c0+c1+c2 raw bytes，不含 from/to 欄位
+        try:
+            raw_b64 = _b64.b64encode(
+                _b64.b64decode(chunks[0]) + _b64.b64decode(chunks[1]) + _b64.b64decode(chunks[2])
+            ).decode()
+        except Exception:
+            return None
+        r = await page.evaluate(_DECRYPT_V1_JS, [channel_ltsm_id, raw_b64])
+        if 'error' in r:
+            raise RuntimeError(f"decrypt_v1 sandbox error: {r['error']}")
+        return r.get('ok')
+    else:
+        # V2: IV(16) + seqKey(12) + ciphertext
+        try:
+            enc_b64 = _b64.b64encode(
+                _b64.b64decode(chunks[0]) + _b64.b64decode(chunks[2]) + _b64.b64decode(chunks[1])
+            ).decode()
+        except Exception:
+            return None
+        r = await page.evaluate(_DECRYPT_V2_JS,
+                                [channel_ltsm_id, from_mid, to_mid,
+                                 s_key_id, r_key_id, content_type, enc_b64])
+        if 'error' in r:
+            raise RuntimeError(f"decrypt_v2 sandbox error: {r['error']}")
+        return r.get('ok')
