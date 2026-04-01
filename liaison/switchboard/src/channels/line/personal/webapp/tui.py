@@ -216,16 +216,17 @@ class MessageItem(ListItem):
         sender_mid = self._msg.get("from", "")
         if self.is_mine:
             name   = self._contacts.get(sender_mid, "我")
-            yield Static(_name_ts_row(name, ts))
-            bubble = Static(Text(f" {text} "), classes="bubble")
-            yield bubble
+            name_s = Static(_name_ts_row(name, ts))
+            name_s.styles.text_align = "right"
+            yield name_s
+            yield Static(Text(text), classes="bubble")
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, sender_mid[:10])
             css_bg = _css_color(color)
             if sender:
                 yield Static(_name_ts_row(sender, ts))
-            text_s = Static(Text(f" {text} "), classes="bubble")
+            text_s = Static(Text(text), classes="bubble")
             text_s.styles.background = css_bg
             text_s.styles.color = "black"
             yield text_s
@@ -315,10 +316,11 @@ Screen { layout: vertical; }
 #input { width: 1fr; }
 ChatItem { height: 4; padding: 0 1; }
 ChatItem.--highlight { background: $primary-darken-1; }
-MessageItem { height: auto; padding: 0 1; margin-bottom: 1; }
+MessageItem { height: auto; }
 MessageItem > Static { width: auto; max-width: 85%; }
 MessageItem.--mine { align-horizontal: right; }
 MessageItem.--mine > .bubble { background: #00af00; color: black; }
+.bubble { padding: 0 1; }
 """
 
 class TuiApp(App):
