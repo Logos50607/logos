@@ -312,7 +312,7 @@ ChatItem.--highlight { background: $primary-darken-1; }
 MessageItem { height: auto; padding: 0 1; margin-bottom: 1; }
 MessageItem > Static { width: auto; max-width: 85%; }
 MessageItem.--mine { align-horizontal: right; }
-MessageItem.--mine > Static { background: green3; color: black; }
+MessageItem.--mine > Static { background: #00af00; color: black; }
 """
 
 class TuiApp(App):
