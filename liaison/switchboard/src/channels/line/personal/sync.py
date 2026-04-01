@@ -166,6 +166,13 @@ async def _fetch_messages(page, ctx: dict) -> None:
             msgs.setdefault(mid, []).extend(new)
             changed = True
             print(f"[{_ts()}] {mid[:12]} +{len(new)} 則", flush=True)
+            # 群組聊天室：收集陌生發言者 mid，留給 _sync_contacts 按需取名
+            if mid.startswith("C") or mid.startswith("R"):
+                contacts = ctx["contacts"]
+                for m in new:
+                    sender = m.get("from", "")
+                    if sender and sender not in contacts:
+                        ctx["pending_sender_mids"].add(sender)
     if changed:
         _write_atomic(_MSGS, msgs)
 
@@ -203,15 +210,23 @@ async def _decrypt_pending(page, ctx: dict) -> None:
 async def _sync_contacts(page, ctx: dict) -> None:
     from webapp.fetch_contacts import _fetch_names, _fetch_group_names
     contacts = ctx["contacts"]
-    missing  = [mid for mid in ctx["messages"] if mid not in contacts]
-    if not missing:
-        return
-    token = ctx["token"]
-    new   = {}
-    if u := [m for m in missing if m.startswith("U")]:
+    token    = ctx["token"]
+    new      = {}
+
+    # 新聊天室（chat mid 本身）
+    missing_chats = [mid for mid in ctx["messages"] if mid not in contacts]
+    if u := [m for m in missing_chats if m.startswith("U")]:
         new.update(await _fetch_names(page, token, u))
-    if g := [m for m in missing if m.startswith("C") or m.startswith("R")]:
+    if g := [m for m in missing_chats if m.startswith("C") or m.startswith("R")]:
         new.update(await _fetch_group_names(page, token, g))
+
+    # 按需：群組內陌生發言者
+    pending = ctx["pending_sender_mids"]
+    if pending:
+        fetched = await _fetch_names(page, token, list(pending))
+        new.update(fetched)
+        pending.clear()
+
     if new:
         contacts.update(new)
         _write_atomic(_FRIENDS, {k: v for k, v in contacts.items() if k.startswith("U")})
@@ -258,15 +273,16 @@ async def main():
                              or str(m.get("text","")) not in real_texts]
 
         ctx = {
-            "token":      token,
-            "token_ts":   time.time(),
-            "my_mid":     my_mid,
-            "key_id":     key_id,
-            "messages":   raw_msgs,
-            "contacts":   contacts,
-            "pub_store":  pub_store,
-            "ltsm_cache": {},
-            "chan_cache":  {},
+            "token":               token,
+            "token_ts":            time.time(),
+            "my_mid":              my_mid,
+            "key_id":              key_id,
+            "messages":            raw_msgs,
+            "contacts":            contacts,
+            "pub_store":           pub_store,
+            "ltsm_cache":          {},
+            "chan_cache":           {},
+            "pending_sender_mids": set(),
         }
 
         _DATA.mkdir(exist_ok=True)
