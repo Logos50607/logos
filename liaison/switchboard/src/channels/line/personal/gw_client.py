@@ -46,31 +46,66 @@ def find_ext_page(ctx):
 # ── 3. get_access_token ──────────────────────────────────────────
 
 async def get_access_token(page) -> str:
-    """reload extension page，攔截 GW request 取得 X-Line-Access token。"""
+    """攔截 GW response 取得 X-Line-Access token。
+
+    GW 請求由 extension page 發出（非 service worker）。
+    reload 時 beforeunload 對話框須 accept（allow navigation），否則 reload 被阻擋。
+    """
     token = {}
+    ctx   = page.context
 
-    async def on_req(req):
-        if 'line-chrome-gw' in req.url and 'x-line-access' in req.headers:
-            token['v'] = req.headers['x-line-access']
+    # 掛到所有 extension pages（service worker 也掛保險）
+    ext_pages = [p for p in ctx.pages if EXT_ID in p.url]
 
-    page.on('request', on_req)
-    await page.reload()
+    async def _grab_token(response) -> None:
+        if 'line-chrome-gw' not in response.url:
+            return
+        try:
+            headers = dict(await response.request.all_headers())
+            if 'x-line-access' in headers:
+                token['v'] = headers['x-line-access']
+        except Exception:
+            pass
 
-    for _ in range(30):
+    async def on_dialog(dialog):
+        try:
+            # beforeunload: dismiss=留在頁面, accept=離開 → 必須 accept 讓 reload 通過
+            if dialog.type == 'beforeunload':
+                await dialog.accept()
+            else:
+                await dialog.dismiss()
+        except Exception:
+            pass
+
+    for ep in ext_pages:
+        ep.on('response', _grab_token)
+    for sw in ctx.service_workers:
+        if EXT_ID in sw.url:
+            sw.on('response', _grab_token)
+    ctx.on('serviceworker', lambda sw: sw.on('response', _grab_token) if EXT_ID in sw.url else None)
+    page.on('dialog', on_dialog)
+
+    try:
+        await page.reload(wait_until="domcontentloaded", timeout=60000)
+    except Exception:
+        pass  # reload 超時無妨，GW 請求仍可在背景攔截
+
+    # 最多等 60 秒
+    for _ in range(120):
         if 'v' in token:
             break
         await asyncio.sleep(0.5)
 
-    page.remove_listener('request', on_req)
+    for ep in ext_pages:
+        try:
+            ep.remove_listener('response', _grab_token)
+        except Exception:
+            pass
+    page.remove_listener('dialog', on_dialog)
     if 'v' not in token:
         raise RuntimeError("無法取得 X-Line-Access token，請確認已登入")
 
-    # 等頁面完全載入，確保 ltsmSandbox iframe 初始化完成
-    try:
-        await page.wait_for_load_state('load', timeout=10000)
-    except Exception:
-        pass
-    # 額外等待，確保 ltsmSandbox wasm 完成初始化
+    # 等 ltsmSandbox iframe 初始化完成
     await asyncio.sleep(2.0)
     return token['v']
 
