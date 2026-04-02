@@ -203,6 +203,7 @@ chunks 格式（5 個 base64）：`[IV(16B), ciphertext, seqKeyId(12B), senderKe
 | Download image | ✅ `download_image.py`（E2EE V2 圖片解密） |
 | Download video | ✅ `download_video.py`（E2EE V2 影片解密） |
 | Download file  | ✅ `download_file.py`（E2EE V2 檔案解密） |
+| Media HTTP server | ✅ `webapp/media_server.py`（SSH 下載媒體） |
 | E2EE 加密模組 | ✅ `encrypt_e2ee.py` |
 | Message processor | ✅ `src/processors/line_personal.py` |
 
@@ -287,3 +288,26 @@ uv run download_file.py --msg-id <id> [--out-dir /tmp]
 ```
 
 以原始 `FILE_NAME`（取自 contentMetadata）儲存至指定目錄。
+
+## 媒體 HTTP Server（SSH 下載）
+
+```bash
+uv run webapp/media_server.py [--port 8889]
+```
+
+啟動後 TUI 訊息泡泡會顯示下載連結（`http://localhost:8889/<msg_id>`）。
+用 SSH tunnel 從本地瀏覽器存取：
+
+```bash
+ssh -L 8889:localhost:8889 user@server
+# 再開瀏覽器 http://localhost:8889/   ← 列出所有媒體
+# 點連結即自動下載解密後的檔案
+```
+
+### 運作原理
+
+1. TUI 泡泡顯示 `http://localhost:8889/<msg_id>`（圖片/影片/音訊/檔案）
+2. 瀏覽器開啟 URL → media_server 將 msg_id 寫入 `data/download_queue.json`
+3. sync.py 在下個輪詢週期（TUI 活躍時 5s）讀取佇列、用現有 LTSM 解密、下載 OBS 檔案
+4. media_server 偵測到 `data/media/<msg_id>` 出現後回傳檔案
+5. 已快取的媒體不重複下載

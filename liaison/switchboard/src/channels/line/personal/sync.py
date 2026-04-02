@@ -43,9 +43,11 @@ _MSGS    = _DATA / "messages.json"
 _FRIENDS = _DATA / "friends.json"
 _GROUPS  = _DATA / "groups.json"
 _PUBKEYS = _DATA / "pubkeys.json"
-_OUTBOX     = _DATA / "outbox.json"
-_STATE      = _DATA / "state.json"
-_TUI_ACTIVE = _DATA / "tui_active"
+_OUTBOX        = _DATA / "outbox.json"
+_STATE         = _DATA / "state.json"
+_TUI_ACTIVE    = _DATA / "tui_active"
+_DOWNLOAD_QUEUE = _DATA / "download_queue.json"
+_MEDIA_DIR      = _DATA / "media"
 
 POLL_INTERVAL_ACTIVE = 5    # TUI 開著時
 POLL_INTERVAL_IDLE   = 600  # TUI 關閉時（10 分鐘）
@@ -205,7 +207,9 @@ async def _decrypt_pending(page, ctx: dict) -> None:
     msgs    = ctx["messages"]
     pending = [
         (mid, m) for mid, chat in msgs.items() for m in chat
-        if m.get("chunks") and m.get("text") is None and not m.get("_decrypt_skip")
+        if (m.get("chunks") and m.get("text") is None
+            and not m.get("_decrypt_skip")
+            and int(m.get("contentType", 0)) == 0)   # 只解密文字，媒體由 _process_download_queue 處理
     ]
     if not pending:
         return
@@ -232,7 +236,72 @@ async def _decrypt_pending(page, ctx: dict) -> None:
         _write_atomic(_PUBKEYS, ctx["pub_store"])
 
 
-# ── 7. 同步聯絡人 ────────────────────────────────────────────────
+# ── 7. 媒體下載佇列 ──────────────────────────────────────────────
+
+async def _process_download_queue(page, ctx: dict) -> None:
+    """處理 media_server 寫入的下載佇列，使用現有 page/token 解密後存 data/media/。"""
+    if not _DOWNLOAD_QUEUE.exists():
+        return
+    queue = json.loads(_DOWNLOAD_QUEUE.read_text())
+    pending = [item for item in queue if item.get("status") == "pending"]
+    if not pending:
+        return
+
+    from gw_client import get_obs_token
+    from download_image import build_talk_meta, _obs_download, _decrypt_image_bytes
+    from download_video import _decrypt_video_bytes
+    from send_api import decrypt_e2ee_message
+
+    _MEDIA_DIR.mkdir(exist_ok=True)
+    msgs   = ctx["messages"]
+    token  = ctx["token"]
+    changed = False
+
+    for item in pending:
+        msg_id  = item["msg_id"]
+        message = next(
+            (m for chat in msgs.values() for m in chat if m.get("id") == msg_id),
+            None,
+        )
+        if not message:
+            item["status"] = "not_found"
+            changed = True
+            continue
+
+        ct  = int(message.get("contentType", 0))
+        out = _MEDIA_DIR / msg_id
+        try:
+            payload = await decrypt_e2ee_message(
+                page, message, ctx["my_mid"], token,
+                ctx["ltsm_cache"], ctx["chan_cache"], ctx["pub_store"],
+                my_personal_key_id=ctx["key_id"], _return_full=True,
+            )
+            if not isinstance(payload, dict) or "keyMaterial" not in payload:
+                raise RuntimeError("解密失敗或無 keyMaterial")
+            km_b64 = payload["keyMaterial"]
+
+            meta     = message.get("contentMetadata") or {}
+            sid_map  = {1: "emi", 2: "emv", 3: "ema", 14: "emf"}
+            sid      = meta.get("SID", sid_map.get(ct, "emi"))
+            oid      = meta.get("OID", msg_id)
+            obs_tok  = await get_obs_token(page, token)
+            raw_data = _obs_download(f"/r/talk/{sid}/{oid}", obs_tok, build_talk_meta(msg_id))
+
+            file_bytes = _decrypt_video_bytes(raw_data, km_b64) if ct == 2 \
+                         else _decrypt_image_bytes(raw_data, km_b64)
+            out.write_bytes(file_bytes)
+            item["status"] = "done"
+            print(f"[{_ts()}] 媒體已下載: {msg_id[:16]}", flush=True)
+        except Exception as e:
+            item["status"] = f"error: {str(e)[:100]}"
+            print(f"[{_ts()}] 媒體下載失敗 {msg_id[:16]}: {e}", flush=True)
+        changed = True
+
+    if changed:
+        _write_atomic(_DOWNLOAD_QUEUE, queue)
+
+
+# ── 8. 同步聯絡人 ────────────────────────────────────────────────
 
 async def _sync_contacts(page, ctx: dict) -> None:
     from webapp.fetch_contacts import _fetch_names, _fetch_group_names
@@ -343,10 +412,20 @@ async def main():
                 await _fetch_messages(page, ctx)
                 await _decrypt_pending(page, ctx)
                 await _sync_contacts(page, ctx)
+                await _process_download_queue(page, ctx)
                 _write_atomic(_STATE, {"my_mid": my_mid, "key_id": key_id, "ts": int(time.time())})
             except Exception as e:
                 print(f"[{_ts()}] 輪詢失敗: {e}", flush=True)
-            await asyncio.sleep(interval)
+            # 閒置模式下若有 pending 下載，縮短為高頻間隔
+            sleep_interval = interval
+            if not tui_active and _DOWNLOAD_QUEUE.exists():
+                try:
+                    q = json.loads(_DOWNLOAD_QUEUE.read_text())
+                    if any(i.get("status") == "pending" for i in q):
+                        sleep_interval = POLL_INTERVAL_ACTIVE
+                except Exception:
+                    pass
+            await asyncio.sleep(sleep_interval)
 
 
 if __name__ == "__main__":

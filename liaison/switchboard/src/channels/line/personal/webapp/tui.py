@@ -252,7 +252,12 @@ class MessageItem(ListItem):
         ct       = int(self._msg.get("contentType", 0))
         raw_text = self._msg.get("text") or ""
         if ct != 0:
-            return _preview(self._msg)
+            label = _preview(self._msg)
+            if ct in (1, 2, 3, 14) and self._msg.get("chunks"):
+                msg_id = self._msg.get("id", "")
+                port   = os.environ.get("LINE_MEDIA_PORT", "8889")
+                return f"{label}\nhttp://localhost:{port}/{msg_id}"
+            return label
         if raw_text:
             return str(raw_text)
         if self._msg.get("chunks"):

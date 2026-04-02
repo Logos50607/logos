@@ -274,7 +274,8 @@ async def send_e2ee_text(page, to: str, text: str,
 async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
                                 ltsm_cache: dict, chan_cache: dict,
                                 pub_store: dict, debug_log=None,
-                                my_personal_key_id: int | None = None) -> str | None:
+                                my_personal_key_id: int | None = None,
+                                _return_full: bool = False) -> str | dict | None:
     """
     解密單則 E2EE V2 訊息，回傳明文 text 或 None。
 
@@ -407,6 +408,8 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         return None
     try:
         data = json.loads(plaintext)
+        if _return_full:
+            return data
         return data.get("text")
     except Exception as e:
         _dlog(f"json.loads 失敗: {e}, raw={repr(plaintext[:40])}")
