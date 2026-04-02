@@ -22,7 +22,7 @@ tui.py - LINE 個人帳號 Terminal UI（純 file-based，資料由 sync.py daem
 # 6. TuiApp：非同步任務 (send / poll / check_files)
 # 7. TuiApp：渲染 (rebuild_list / show_messages / append_message)
 
-import ast, json, sys, time
+import ast, json, os, sys, time, unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -171,6 +171,52 @@ def _load_messages() -> dict:
     return json.loads(_MSGS.read_text()) if _MSGS.exists() else {}
 
 
+def _cell_len(s: str) -> int:
+    """以終端機欄位為單位計算字串寬度（CJK = 2）。"""
+    return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in s)
+
+def _cjk_wrap(text: str, width: int) -> str:
+    """CJK-aware word-wrap：空格為優先斷點，但不會在空格後立即換行。
+    token 放不下時：先把 separator 加進去，再逐字元填滿本行，剩餘的繼續下一行。
+    這樣 '38 號' 這類 ASCII+space+CJK 不會被切在不同行。
+    """
+    out = []
+    for para in text.split('\n'):
+        line, llen = '', 0
+        for word in para.split(' '):
+            wl = _cell_len(word)
+            if line and llen + 1 + wl <= width:
+                line += ' ' + word
+                llen += 1 + wl
+                continue
+            # word 放不進去（或行首）：逐字元填
+            chars = word
+            if line:
+                if llen + 1 < width:   # 還有空間放 space + 至少一個字元
+                    line += ' '
+                    llen += 1
+                else:                   # 塞不下 space，先把本行輸出
+                    out.append(line)
+                    line, llen = '', 0
+            for ch in chars:
+                cw = _cell_len(ch)
+                if llen + cw <= width:
+                    line += ch
+                    llen += cw
+                else:
+                    out.append(line)
+                    line, llen = ch, cw
+        out.append(line)
+    return '\n'.join(out)
+
+def _bubble_width() -> int:
+    """估算泡泡的可用欄寬（terminal 寬 - sidebar - border - bubble padding）。"""
+    try:
+        cols = os.get_terminal_size().columns
+    except OSError:
+        cols = 80
+    return max(10, int((cols - 28) * 0.85) - 2)
+
 def _name_ts_row(name: str, ts: str) -> Text:
     """名字 + 兩格空白 + 灰色時間。"""
     return Text.assemble((name, "bold white"), ("  ", ""), (ts, "dim"))
@@ -218,19 +264,21 @@ class MessageItem(ListItem):
         text       = self._build_text()
         ts         = _ts(self._msg.get("createdTime", 0))
         sender_mid = self._msg.get("from", "")
+        bw      = _bubble_width()
+        wrapped = _cjk_wrap(text, bw)
         if self.is_mine:
             name = self._contacts.get(sender_mid, "我")
             yield Static(Align.right(_name_ts_row(name, ts)), classes="name-row")
             with Horizontal(classes="bubble-row"):
                 yield Static("", classes="mine-spacer")
-                yield Static(Text(text), classes="bubble")
+                yield Static(wrapped, markup=False, classes="bubble")
         else:
             color  = _sender_style(sender_mid)
             sender = self._contacts.get(sender_mid, sender_mid[:10])
             css_bg = _css_color(color)
             if sender:
                 yield Static(_name_ts_row(sender, ts), classes="name-row")
-            text_s = Static(Text(text), classes="bubble")
+            text_s = Static(wrapped, markup=False, classes="bubble")
             text_s.styles.background = css_bg
             text_s.styles.color = "black"
             yield text_s
