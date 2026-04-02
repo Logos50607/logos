@@ -73,7 +73,10 @@ async def _refresh_token(page, ctx: dict) -> None:
         return
     ctx["token"]    = await get_access_token(page)
     ctx["token_ts"] = time.time()
-    print(f"[{_ts()}] token 已更新", flush=True)
+    # page.reload() 重新初始化 LTSM sandbox → 舊 slot ID 全部失效，必須清除
+    ctx["ltsm_cache"].clear()
+    ctx["chan_cache"].clear()
+    print(f"[{_ts()}] token 已更新（ltsm/chan cache 已清除）", flush=True)
 
 
 # ── 4. 處理 outbox（發送 / 收回）────────────────────────────────
