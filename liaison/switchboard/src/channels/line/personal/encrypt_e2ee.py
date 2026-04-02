@@ -254,7 +254,11 @@ async def make_decrypt_channel(page, my_ltsm_key_id: int, sender_pub_b64: str) -
 
 
 async def load_idb_pubkeys(page) -> dict:
-    """讀取 IndexedDB LINE_COMMON.e2ee_public_key，回傳 {keyId_str: keyData_b64}。"""
+    """讀取 IndexedDB LINE_COMMON.e2ee_public_key。
+
+    回傳 {keyId_str: {"data": keyData_b64, "createdTime": int_ms}}
+    （createdTime=0 表示 IDB 未提供）
+    """
     result = await page.evaluate("""() => new Promise((resolve) => {
         const req = indexedDB.open('LINE_COMMON');
         req.onerror = () => resolve({});
@@ -270,7 +274,10 @@ async def load_idb_pubkeys(page) -> dict:
                 if (c) {
                     const pub = c.value && c.value.e2eePublicKey;
                     if (pub && pub.keyId && pub.keyData) {
-                        out[String(pub.keyId)] = pub.keyData;
+                        out[String(pub.keyId)] = {
+                            data: pub.keyData,
+                            createdTime: parseInt(pub.createdTime || 0, 10)
+                        };
                     }
                     c.continue();
                 } else {

@@ -217,9 +217,12 @@ def _bubble_width() -> int:
         cols = 80
     return max(10, int((cols - 28) * 0.85) - 2)
 
-def _name_ts_row(name: str, ts: str) -> Text:
-    """名字 + 兩格空白 + 灰色時間。"""
-    return Text.assemble((name, "bold white"), ("  ", ""), (ts, "dim"))
+def _name_ts_row(name: str, ts: str, *, unsent: bool = False) -> Text:
+    """名字 + 兩格空白 + 灰色時間（+ 已收回標記）。"""
+    parts = [(name, "bold white"), ("  ", ""), (ts, "dim")]
+    if unsent:
+        parts.append(("  已收回", "dim red"))
+    return Text.assemble(*parts)
 
 
 
@@ -246,8 +249,6 @@ class MessageItem(ListItem):
         return bool(self._my_mid and self._msg.get("from") == self._my_mid)
 
     def _build_text(self) -> str:
-        if self._msg.get("_unsent"):
-            return "[已收回]"
         ct       = int(self._msg.get("contentType", 0))
         raw_text = self._msg.get("text") or ""
         if ct != 0:
@@ -264,11 +265,13 @@ class MessageItem(ListItem):
         text       = self._build_text()
         ts         = _ts(self._msg.get("createdTime", 0))
         sender_mid = self._msg.get("from", "")
+        unsent     = bool(self._msg.get("_unsent"))
         bw      = _bubble_width()
         wrapped = _cjk_wrap(text, bw)
         if self.is_mine:
             name = self._contacts.get(sender_mid, "我")
-            yield Static(Align.right(_name_ts_row(name, ts)), classes="name-row")
+            name_row = _name_ts_row(name, ts, unsent=unsent)
+            yield Static(Align.right(name_row), classes="name-row")
             with Horizontal(classes="bubble-row"):
                 yield Static("", classes="mine-spacer")
                 yield Static(wrapped, markup=False, classes="bubble")
@@ -277,7 +280,7 @@ class MessageItem(ListItem):
             sender = self._contacts.get(sender_mid, sender_mid[:10])
             css_bg = _css_color(color)
             if sender:
-                yield Static(_name_ts_row(sender, ts), classes="name-row")
+                yield Static(_name_ts_row(sender, ts, unsent=unsent), classes="name-row")
             text_s = Static(wrapped, markup=False, classes="bubble")
             text_s.styles.background = css_bg
             text_s.styles.color = "black"

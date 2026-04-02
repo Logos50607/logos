@@ -39,6 +39,11 @@ from encrypt_e2ee import (encrypt_message, _SANDBOX_JS,
 _PATH_SEND      = "/api/talk/thrift/Talk/TalkService/sendMessage"
 _PATH_NEGOTIATE = "/api/talk/thrift/Talk/TalkService/negotiateE2EEPublicKey"
 
+
+def _pub_data(v) -> str:
+    """從 pub_store 條目取 keyData（相容新舊格式）。"""
+    return v["data"] if isinstance(v, dict) else v
+
 # LINE E2EE server 錯誤碼
 _E2EE_RETRY_ENCRYPT      = 82  # channel cache 過期 → 重取 key 重試
 _E2EE_UPDATE_SENDER_KEY  = 83  # 我的 key 已失效   → fatal，需重登
@@ -294,7 +299,7 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
     if other_key_str not in pub_store:
         try:
             fetched_key_id, pub_b64 = await get_recipient_key(page, token, other_mid)
-            pub_store[str(fetched_key_id)] = pub_b64
+            pub_store[str(fetched_key_id)] = {"data": pub_b64, "createdTime": int(time.time() * 1000)}
             _dlog(f"get_recipient_key OK: keyId={fetched_key_id}")
         except Exception as e:
             _dlog(f"get_recipient_key 失敗: {e}")
@@ -303,7 +308,7 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         _dlog(f"other keyId={other_key_id} 不在 store，且 API 回傳的是不同 key（已輪換）")
         msg["_decrypt_skip"] = True
         return None
-    other_pub = pub_store[other_key_str]
+    other_pub = _pub_data(pub_store[other_key_str])
 
     # 建立解密 channel（cache by (my_ltsm, other_mid, other_key_id)）
     chan_key = (my_ltsm, other_mid, other_key_id)

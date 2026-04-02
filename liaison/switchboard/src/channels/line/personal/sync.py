@@ -192,18 +192,23 @@ async def _decrypt_pending(page, ctx: dict) -> None:
     if not pending:
         return
     ok = fail = 0
+    debug_log = _DATA / "decrypt_debug.log"  # 只對第一則記錄詳細步驟
+    first = True
     for mid, m in pending:
         text = await decrypt_e2ee_message(
             page, m, ctx["my_mid"], ctx["token"],
             ctx["ltsm_cache"], ctx["chan_cache"], ctx["pub_store"],
+            debug_log=debug_log if first else None,
         )
+        first = False
         if text is not None:
             m["text"] = text
             ok += 1
         else:
             fail += 1
-    if ok:
+    if ok or fail:
         print(f"[{_ts()}] 解密 {ok} 則成功，{fail} 則失敗", flush=True)
+    if ok:
         _write_atomic(_MSGS, msgs)
         _write_atomic(_PUBKEYS, ctx["pub_store"])
 
@@ -273,7 +278,10 @@ async def main():
             if p.exists():
                 contacts.update(json.loads(p.read_text()))
 
-        pub_store = _read_json(_PUBKEYS, {})
+        raw_pub   = _read_json(_PUBKEYS, {})
+        # 遷移舊格式（純 str → {data, createdTime}）
+        pub_store = {k: (v if isinstance(v, dict) else {"data": v, "createdTime": 0})
+                     for k, v in raw_pub.items()}
         pub_store.update(await load_idb_pubkeys(page))
 
         raw_msgs = _read_json(_MSGS, {})
