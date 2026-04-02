@@ -381,6 +381,7 @@ MessageItem.--mine .bubble { background: #00af00; color: black; }
 
 class TuiApp(App):
     CSS = CSS
+    ENABLE_MOUSE_SUPPORT = False   # 關閉讓 tmux 可用 Shift+drag 選取文字
     BINDINGS = [
         Binding("q",      "quit",          "離開"),
         Binding("n",      "new_chat",      "新對話"),

@@ -166,6 +166,24 @@ async def _fetch_messages(page, ctx: dict) -> None:
             if unsent_count:
                 print(f"[{_ts()}] {mid[:12]} 偵測到 {unsent_count} 則收回", flush=True)
         if new:
+            # 我傳出去的 E2EE 訊息：從配對 local- 訊息複製文字，避免「已發送→文字」閃爍
+            my_mid = ctx["my_mid"]
+            locals_by_mid = {m["id"]: m for m in msgs.get(mid, []) if m["id"].startswith("local-")}
+            for m in new:
+                if (m.get("from") == my_mid
+                        and m.get("chunks")
+                        and m.get("text") is None):
+                    ts = int(m.get("createdTime", 0))
+                    match = None
+                    for loc in locals_by_mid.values():
+                        if (loc.get("from") == my_mid
+                                and loc.get("text")
+                                and abs(int(loc.get("createdTime", 0)) - ts) < 10000):
+                            match = loc
+                            break
+                    if match:
+                        m["text"] = match["text"]
+                        msgs[mid].remove(match)
             msgs.setdefault(mid, []).extend(new)
             changed = True
             print(f"[{_ts()}] {mid[:12]} +{len(new)} 則", flush=True)
