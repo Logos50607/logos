@@ -110,6 +110,40 @@ _CREATE_CHANNEL_JS = """([keyId, pubB64]) => new Promise((resolve) => {
     }, 40);
 })"""
 
+_UNWRAP_GROUP_KEY_JS = """([channelId, encKeyB64]) => new Promise((resolve) => {
+    // e2eechannel_unwrap_group_shared_key: 用 channelId 的 ECDH key 解包群組私鑰
+    // 回傳整數 groupLtsmKeyId（群組私鑰在 LTSM 的 slot）
+    const iframe = document.querySelector("iframe[src*='ltsmSandbox']");
+    if (!iframe) { resolve({error: "no iframe"}); return; }
+    const sandboxId = new URL(iframe.src).searchParams.get("sandboxId");
+    const payload = Uint8Array.from(atob(encKeyB64), c => c.charCodeAt(0));
+    setTimeout(() => {
+        const handler = (evt) => {
+            const d = evt.data;
+            if (d && d.sandboxId === sandboxId &&
+                (d.type === "response" || d.type === "error")) {
+                if (d.type === "response" && typeof d.data !== "number") return;
+                window.removeEventListener("message", handler);
+                resolve(d.type === "response" ? {ok: d.data} : {error: String(d.data)});
+            }
+        };
+        window.addEventListener("message", handler);
+        iframe.contentWindow.postMessage({sandboxId, type: "request",
+            data: {command: "e2eechannel_unwrap_group_shared_key",
+                   ltsmKeyId: channelId, payload}}, "*");
+        setTimeout(() => resolve({error: "timeout"}), 8000);
+    }, 40);
+})"""
+
+
+async def unwrap_group_key(page, channel_ltsm_id: int, enc_key_b64: str) -> int:
+    """解包群組私鑰：用 channel 解密 encryptedSharedKey，回傳群組私鑰的 ltsm slot。"""
+    r = await page.evaluate(_UNWRAP_GROUP_KEY_JS, [channel_ltsm_id, enc_key_b64])
+    if 'ok' in r:
+        return r['ok']
+    raise RuntimeError(f"e2eechannel_unwrap_group_shared_key 失敗: {r.get('error')}")
+
+
 _DECRYPT_V1_JS = """([chId, rawB64]) => new Promise((resolve) => {
     // E2EE V1：payload 是 raw bytes（c0+c1+c2），不含 from/to 等欄位
     const iframe = document.querySelector("iframe[src*='ltsmSandbox']");

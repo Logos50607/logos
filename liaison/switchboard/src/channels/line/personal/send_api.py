@@ -34,10 +34,12 @@ from playwright.async_api import async_playwright
 sys.path.insert(0, str(Path(__file__).parent))
 from gw_client import CDP_URL, find_ext_page, get_access_token, compute_hmac, call_api
 from encrypt_e2ee import (encrypt_message, _SANDBOX_JS,
-                          _load_my_key, make_decrypt_channel, decrypt_e2ee_chunks)
+                          _load_my_key, make_decrypt_channel, decrypt_e2ee_chunks,
+                          unwrap_group_key)
 
 _PATH_SEND      = "/api/talk/thrift/Talk/TalkService/sendMessage"
 _PATH_NEGOTIATE = "/api/talk/thrift/Talk/TalkService/negotiateE2EEPublicKey"
+_PATH_GROUP_KEY = "/api/talk/thrift/Talk/TalkService/getLastE2EEGroupSharedKey"
 
 
 def _pub_data(v) -> str:
@@ -95,6 +97,44 @@ async def get_recipient_key(page, token: str, recipient_mid: str) -> tuple[int, 
     if not pub_key:
         raise RuntimeError(f"找不到 {recipient_mid[:20]} 的公鑰（可能未啟用 E2EE）")
     return pub_key['keyId'], pub_key['keyData']
+
+
+async def load_group_key(page, token: str, chat_mid: str,
+                         my_personal_ltsm: int, pub_store: dict) -> int:
+    """
+    取得並解包群組私鑰，回傳群組私鑰的 LTSM slot ID。
+
+    流程：
+      1. getLastE2EEGroupSharedKey → {groupKeyId, creatorKeyId, encryptedSharedKey}
+      2. 從 pub_store 取 creator 公鑰（需是 creatorKeyId 對應的 key）
+      3. make_decrypt_channel(my_personal_ltsm, creator_pub) → channel_id
+      4. unwrap_group_key(channel_id, encryptedSharedKey) → group_ltsm_id
+    """
+    body_obj = [1, chat_mid]
+    body_str = json.dumps(body_obj)
+    hmac = await compute_hmac(page, token, _PATH_GROUP_KEY, body_str)
+    result = call_api(_PATH_GROUP_KEY, body_obj, token, hmac)
+    if result.get('code') != 0:
+        raise RuntimeError(f"getLastE2EEGroupSharedKey 失敗: {result}")
+    d = result.get('data', {})
+    creator_key_id = d.get('creatorKeyId')
+    enc_shared_key = d.get('encryptedSharedKey', '')
+    if not enc_shared_key:
+        raise RuntimeError(f"群組 {chat_mid[:16]} 無 encryptedSharedKey")
+
+    # 取 creator 公鑰（通常已在 pub_store，否則打 API）
+    creator_key_str = str(creator_key_id)
+    if creator_key_str not in pub_store:
+        creator_mid = d.get('creator', '')
+        fetched_id, pub_b64 = await get_recipient_key(page, token, creator_mid)
+        pub_store[str(fetched_id)] = {"data": pub_b64, "createdTime": int(time.time() * 1000)}
+    creator_pub = _pub_data(pub_store[creator_key_str])
+
+    # 建立 channel：我的個人私鑰 + creator 公鑰 → ECDH shared secret
+    channel_id = await make_decrypt_channel(page, my_personal_ltsm, creator_pub)
+    # 解包群組私鑰
+    group_ltsm_id = await unwrap_group_key(page, channel_id, enc_shared_key)
+    return group_ltsm_id
 
 
 # ── 3. 單次 encrypt + sendMessage（key 可注入）───────────────────
@@ -233,14 +273,16 @@ async def send_e2ee_text(page, to: str, text: str,
 
 async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
                                 ltsm_cache: dict, chan_cache: dict,
-                                pub_store: dict, debug_log=None) -> str | None:
+                                pub_store: dict, debug_log=None,
+                                my_personal_key_id: int | None = None) -> str | None:
     """
-    解密單則收到的 E2EE V2 訊息，回傳明文 text 或 None。
+    解密單則 E2EE V2 訊息，回傳明文 text 或 None。
 
-    ltsm_cache: {r_key_id: my_ltsm_key_id}
-    chan_cache:  {(my_ltsm_id, sender_mid, s_key_id): channel_ltsm_id}
-    pub_store:   {key_id_str: pub_b64}  ← 扁平結構，keyId 全域唯一
-    debug_log:   Path → 只有第一則訊息傳入，逐步記錄失敗原因
+    ltsm_cache:         {key_id: ltsm_slot_id}  ← 含個人金鑰與群組金鑰
+    chan_cache:          {(my_ltsm_id, other_mid, other_key_id): channel_ltsm_id}
+    pub_store:           {key_id_str: {data, createdTime}}
+    my_personal_key_id:  我的個人 E2EE key id（用於解包群組金鑰）
+    debug_log:           Path → 只對第一則記錄步驟
     """
     import base64, struct
     from datetime import datetime as _dt
@@ -266,30 +308,57 @@ async def decrypt_e2ee_message(page, msg: dict, my_mid: str, token: str,
         _dlog(f"parse key_id 失敗: {e}")
         return None
 
-    # 判斷方向：自己發出 → 私鑰=s_key_id；收到 → 私鑰=r_key_id
-    i_am_sender = (sender_mid == my_mid)
-    if i_am_sender:
-        my_key_id    = s_key_id
-        other_key_id = r_key_id
-        other_mid    = msg.get("to", "")
-        from_mid, to_mid = my_mid, other_mid
-    else:
+    # 判斷方向與金鑰：群組訊息固定用 r_key_id（群組金鑰），1-to-1 依發送方向
+    chat_mid = msg.get("to", "")
+    is_group = chat_mid.startswith("C") or chat_mid.startswith("R")
+    if is_group:
+        # 群組 E2EE：r_key_id = 群組共享金鑰 ID（所有訊息相同）
+        #            s_key_id = 發送者個人金鑰（用於建立 channel）
         my_key_id    = r_key_id
         other_key_id = s_key_id
         other_mid    = sender_mid
-        from_mid, to_mid = sender_mid, msg.get("to", "")
+        from_mid, to_mid = sender_mid, chat_mid
+        _dlog(f"群組訊息: group_key={my_key_id} sender_key={other_key_id}")
+    elif sender_mid == my_mid:
+        # 1-to-1 自己發出：私鑰 = s_key_id（我的個人金鑰）
+        my_key_id    = s_key_id
+        other_key_id = r_key_id
+        other_mid    = chat_mid
+        from_mid, to_mid = my_mid, chat_mid
+    else:
+        # 1-to-1 收到：私鑰 = r_key_id（我的個人金鑰）
+        my_key_id    = r_key_id
+        other_key_id = s_key_id
+        other_mid    = sender_mid
+        from_mid, to_mid = sender_mid, chat_mid
 
-    # 載入我的私鑰
+    # 載入我的私鑰（群組金鑰需透過 load_group_key；個人金鑰掃 LTSM）
     if my_key_id not in ltsm_cache:
-        try:
-            ltsm_cache[my_key_id] = await _load_my_key(page, my_mid, my_key_id)
-            _dlog(f"_load_my_key OK: ltsm={ltsm_cache[my_key_id]}")
-        except Exception as e:
-            _dlog(f"_load_my_key 失敗 (my_key_id={my_key_id}): {e}")
-            # 用 -1 sentinel 標記：此 session 不再重試（避免重複掃描 50 slots），
-            # 但不設 _decrypt_skip，下次啟動 LTSM 就緒後可重試。
-            ltsm_cache[my_key_id] = -1
-            return None
+        if is_group:
+            # 群組金鑰：需先確保個人金鑰已載入，再解包群組金鑰
+            personal_key_id = my_personal_key_id
+            if personal_key_id is None or personal_key_id not in ltsm_cache:
+                _dlog(f"群組金鑰解包失敗：個人金鑰 {personal_key_id} 未在 ltsm_cache")
+                return None
+            personal_ltsm = ltsm_cache[personal_key_id]
+            if personal_ltsm == -1:
+                return None
+            try:
+                ltsm_cache[my_key_id] = await load_group_key(
+                    page, token, chat_mid, personal_ltsm, pub_store)
+                _dlog(f"load_group_key OK: group_key={my_key_id} ltsm={ltsm_cache[my_key_id]}")
+            except Exception as e:
+                _dlog(f"load_group_key 失敗: {e}")
+                ltsm_cache[my_key_id] = -1
+                return None
+        else:
+            try:
+                ltsm_cache[my_key_id] = await _load_my_key(page, my_mid, my_key_id)
+                _dlog(f"_load_my_key OK: ltsm={ltsm_cache[my_key_id]}")
+            except Exception as e:
+                _dlog(f"_load_my_key 失敗 (my_key_id={my_key_id}): {e}")
+                ltsm_cache[my_key_id] = -1
+                return None
     if ltsm_cache[my_key_id] == -1:
         return None
     my_ltsm = ltsm_cache[my_key_id]

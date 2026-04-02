@@ -199,6 +199,7 @@ async def _decrypt_pending(page, ctx: dict) -> None:
             page, m, ctx["my_mid"], ctx["token"],
             ctx["ltsm_cache"], ctx["chan_cache"], ctx["pub_store"],
             debug_log=debug_log if first else None,
+            my_personal_key_id=ctx["key_id"],
         )
         first = False
         if text is not None:

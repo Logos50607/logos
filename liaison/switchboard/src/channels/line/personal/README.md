@@ -165,16 +165,28 @@ uv run send_api.py --to <mid> --text "訊息內容"
 ### E2EE 技術說明
 
 LINE E2EE V2 使用 Curve25519 ECDH + AES 加密，全部在 `ltsm.wasm` 內執行，
-透過 `ltsmSandbox` iframe 的 postMessage 介面對外暴露：
-
-| 指令 | 說明 |
-|------|------|
-| `decrypt_with_storage_key` | 解密 localStorage 中的私鑰 |
-| `e2eekey_load_key(keyBytes)` | 載入私鑰到 wasm → 回傳 keyLtsmId |
-| `e2eekey_create_channel(keyId, pubKeyBytes)` | ECDH 建立 channel → 回傳 channelLtsmId |
-| `e2eechannel_encrypt_v2(channelId, payload)` | AES 加密 → 回傳 raw bytes |
+透過 `ltsmSandbox` iframe 的 postMessage 介面對外暴露。
 
 chunks 格式（5 個 base64）：`[IV(16B), ciphertext, seqKeyId(12B), senderKeyId(4B), receiverKeyId(4B)]`
+
+#### 金鑰類型
+
+| 類型 | keyId 範圍 | 儲存位置 |
+|------|-----------|---------|
+| **個人金鑰** | ~600K–6M | LTSM wasm slots 1–50；公鑰在 IDB `e2ee_public_key` |
+| **群組金鑰** | ~100M–200M | 不在 IDB / LTSM 預載；需透過 `getLastE2EEGroupSharedKey` API 取得加密版本再解包 |
+
+群組金鑰解包流程：
+1. `getLastE2EEGroupSharedKey(1, chat_mid)` → `{groupKeyId, creatorKeyId, encryptedSharedKey}`
+2. `make_decrypt_channel(my_ltsm, creator_pub)` → channel
+3. `e2eechannel_unwrap_group_shared_key(channel, encryptedSharedKey)` → group_ltsm_id
+
+#### 解密方向
+
+- **1-to-1**：收到時 `my_key = r_key_id`；發出時 `my_key = s_key_id`
+- **群組**：**所有訊息** `my_key = r_key_id`（群組金鑰），`other_key = s_key_id`（發送者個人公鑰）
+
+詳細說明見 `.agent/skills/e2ee-key-architecture.md`。
 
 ## 模組狀態
 
