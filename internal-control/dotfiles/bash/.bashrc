@@ -139,4 +139,5 @@ export PATH="$PATH:/home/logos/.turso"
 export LINE_OA_CHAT_WHITELIST="Ued0d228b5a360577ceb5f580d9cdf12f"
 
 # LINE Personal TUI
-alias switchboard-tui='cd /data/logos/liaison/switchboard/src/channels/line/personal/webapp && uv run tui.py'
+alias switchboard-tui='cd /data/personal/liason-tui && uv run tui.py'
+export PATH="$HOME/.local/bin:$PATH"

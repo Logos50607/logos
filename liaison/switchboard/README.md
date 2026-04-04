@@ -26,8 +26,8 @@ switchboard/
 ├── src/
 │   ├── channels/               # 各平台 channel 介接層
 │   │   └── line/
-│   │       ├── personal/       # CDP tap LINE Chrome extension（個人帳號）
-│   │       └── official/       # LINE Messaging API（官方帳號，webhook + push）
+│   │       ├── personal/       # 薄 adapter，呼叫 /data/personal/line-personal API :8000
+│   │       └── official/       # 薄 adapter，呼叫 /data/personal/line-official API（遷移中）
 │   ├── processors/             # 訊息分析與任務提取
 │   ├── output/                 # 任務清單與通知輸出
 │   └── core/                   # 核心協調邏輯
@@ -37,21 +37,30 @@ switchboard/
 └── DEPENDENCIES.md
 ```
 
+### 外部服務（獨立部署，非本 repo）
+
+| 服務 | 位置 | 說明 |
+|------|------|------|
+| line-personal | `/data/personal/line-personal/` | Chrome CDP + PostgreSQL + FastAPI :8000 |
+| line-official | `/data/personal/line-official/` | Messaging API + webhook server（搬遷中） |
+
 ## 使用指南 (Usage Guide)
 
-### LINE 個人帳號 inbound（已可用）
+### LINE 個人帳號 inbound
+
+LINE 個人帳號服務已獨立至 `/data/personal/line-personal/`（CDP + PostgreSQL + FastAPI）。
+
+Switchboard 的 `src/channels/line/personal/` 為薄 adapter，透過 API 呼叫消費：
 
 ```bash
-# 1. 啟動 Chrome（見 src/channels/line/personal/README.md）
-# 2. 開始錄製
-uv run src/channels/line/personal/capture.py --duration 60
+# 啟動 line-personal 服務（在 /data/personal/line-personal/）
+bash scripts/ensure-services.sh   # sync daemon + media server
 
-# 3. 解析訊息
-python3 src/processors/line_personal.py --input src/channels/line/personal/captured.json
-
-# 4. 查看 operation type 統計（探索資料結構用）
-python3 src/processors/line_personal.py --input src/channels/line/personal/captured.json --discover
+# Switchboard 透過 HTTP API 取得訊息
+GET http://localhost:8000/messages
 ```
+
+詳細操作見 `/data/personal/line-personal/README.md`。
 
 ## 實作原理 (Implementation Details)
 
@@ -66,13 +75,12 @@ python3 src/processors/line_personal.py --input src/channels/line/personal/captu
 
 ## 模組實作狀態
 
-| 模組 | 狀態 |
-|------|------|
-| LINE 個人 inbound（CDP capture） | ✅ |
-| LINE 個人 outbound（CDP send） | ⬜ |
-| LINE 官方 設定精靈（setup wizard） | ✅ `src/channels/line/official/setup.py` |
-| LINE 官方 inbound（webhook） | ⬜ |
-| LINE 官方 outbound（push/reply） | ⬜ |
-| Processors（訊息解析） | ✅ LINE personal（`src/processors/line_personal.py`）|
-| Output（任務輸出） | ⬜ |
-| Core pipeline | ⬜ |
+| 模組 | 狀態 | 位置 |
+|------|------|------|
+| LINE 個人服務（CDP + DB + API） | ✅ 已獨立 | `/data/personal/line-personal/` |
+| LINE 個人 channel adapter | ⬜ 待改寫為薄 adapter | `src/channels/line/personal/` |
+| LINE 官方服務（setup + webhook + push） | 🔄 搬遷中 | → `/data/personal/line-official/` |
+| LINE 官方 channel adapter | ⬜ | `src/channels/line/official/` |
+| Processors（訊息解析） | ✅ LINE personal | `src/processors/line_personal.py` |
+| Output（任務輸出） | ⬜ | |
+| Core pipeline | ⬜ | |

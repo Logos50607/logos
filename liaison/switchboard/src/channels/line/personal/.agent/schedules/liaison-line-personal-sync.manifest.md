@@ -8,8 +8,8 @@ schedule:
   expr: "5m"
 command:
   type: script
-  script_path: src/channels/line/personal/scripts/ensure-services.sh
-  working_dir: /data/logos/liaison/switchboard
+  script_path: scripts/ensure-services.sh
+  working_dir: /data/personal/line-personal
 retry:
   max_attempts: 2
   delay_seconds: 30
