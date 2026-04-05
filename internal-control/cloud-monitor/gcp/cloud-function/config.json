@@ -5,6 +5,7 @@
   "projects": [
     { "id": "trip-assistant-490916", "budget_twd": 100, "billable_to": "self" },
     { "id": "accounting-419607",     "budget_twd": 200, "billable_to": "self" },
-    { "id": "tsldb-project",         "budget_twd": 100, "billable_to": "self" }
+    { "id": "tsldb-project",         "budget_twd": 100, "billable_to": "self" },
+    { "id": "real-asset-sale-ricky", "budget_twd": 100, "billable_to": "self" }
   ]
 }

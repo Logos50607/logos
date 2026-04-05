@@ -1,8 +1,10 @@
 """BigQuery billing export 查詢。"""
 import json
+import logging
 import os
 from datetime import datetime, timezone
 
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 
@@ -44,8 +46,13 @@ def fetch_monthly_costs() -> list[dict]:
             bigquery.ScalarQueryParameter("invoice_month", "STRING", invoice_month)
         ]
     )
-    rows = client.query(query, job_config=job_cfg).result()
-    return [
-        {"project_id": r.project_id, "cost": float(r.net_cost or 0), "currency": r.currency}
-        for r in rows
-    ]
+    try:
+        rows = client.query(query, job_config=job_cfg).result()
+        return [
+            {"project_id": r.project_id, "cost": float(r.net_cost or 0), "currency": r.currency}
+            for r in rows
+        ]
+    except NotFound:
+        # Billing export 剛設定，table 尚未生成（通常需要 24-48 小時）
+        logging.warning("billing export table not found yet: %s", table)
+        return []
