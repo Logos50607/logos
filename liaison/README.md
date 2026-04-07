@@ -16,7 +16,7 @@ description: "聯絡組總覽：AI 與人類的雙向通訊橋接，負責訊息
 
 ```
 liaison/
-├── switchboard/    # 訊息閘道（多平台 inbound / outbound 執行層）
+├── switchboard/    # 對外聯繫工具入口（LINE 個人 / 官方 symlink）
 └── README.md       # 本文件
 ```
 
@@ -24,11 +24,13 @@ liaison/
 
 ### Switchboard
 
-[`switchboard/`](./switchboard/README.md) 是聯絡組的訊息執行工具，負責：
-- 擷取各平台的人類訊息（inbound）
-- 代 AI 團隊發送訊息給人類（outbound）
+**需要對外聯繫，一律使用 [`switchboard/`](./switchboard/README.md)。**
 
-聯絡組不直接操作平台 API，一律透過 switchboard 的 channel 介面。
+Switchboard 是聯絡組的訊息工具入口，目前收錄：
+- `line-personal/`：LINE 個人帳號（CDP + FastAPI :8000）
+- `line-official/`：LINE 官方帳號（Playwright + FastAPI :8001）
+
+兩者皆為 symlink，實體位於 `/data/personal/`。詳細啟動與使用方式見 `switchboard/README.md`。
 
 ## 通訊策略
 
@@ -67,7 +69,7 @@ liaison/
 
 | Channel | Inbound | Outbound | 說明 |
 |---------|---------|----------|------|
-| LINE 個人帳號 | ✅ `capture.py` 可用 | ⬜ 待建立 | CDP tap LINE Chrome extension，不動未讀狀態 |
-| LINE 官方帳號 | ⬜ 待建立 | ⬜ 待建立 | Messaging API：inbound 靠 webhook，outbound 靠 push/reply API |
+| LINE 個人帳號 | ✅ | ✅ | CDP + FastAPI :8000；`line-personal/` |
+| LINE 官方帳號 | ✅ | ✅ | Playwright + FastAPI :8001；`line-official/` |
 | Discord | ⬜ | ⬜ | |
 | Trello | ⬜ | ⬜ | |

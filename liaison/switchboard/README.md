@@ -1,86 +1,112 @@
 ---
 name: switchboard
-description: "AI 訊息整合閘道器，彙整多平台訊息並轉換為任務清單與提醒。"
+description: "聯絡組訊息工具入口：LINE 個人帳號與官方帳號的使用指南。"
 ---
 
 # Switchboard
 
-AI 驅動的訊息整合閘道器，協助使用者在不破壞原始訊息未讀狀態的前提下，彙整來自多平台的訊息，並轉換為可操作的任務清單與提醒。
-
-## 核心目標 (Core Goal)
-
-讓 AI Agent 在有邊界的狀況下：
-1. 讀取各平台的訊息（LINE、Discord、Trello 等）
-2. 分析並整合成結構化任務清單
-3. 觸發後續動作或通知使用者
-4. **不破壞原始訊息的未讀狀態**
-
-## 結構索引 (Structure Index)
+聯絡組對外聯繫的工具入口。目前包含兩個 LINE channel，各自為獨立服務，透過 symlink 指向 `/data/personal/`。
 
 ```
 switchboard/
-├── .agent/
-│   ├── rules/          # 專案規範
-│   ├── skills/         # 輔助技能
-│   └── workflows/      # 自動化工作流
-├── src/
-│   ├── channels/               # 各平台 channel 介接層
-│   │   └── line/
-│   │       ├── personal/       # 薄 adapter，呼叫 /data/personal/line-personal API :8000
-│   │       └── official/       # 薄 adapter，呼叫 /data/personal/line-official API（遷移中）
-│   ├── processors/             # 訊息分析與任務提取
-│   ├── output/                 # 任務清單與通知輸出
-│   └── core/                   # 核心協調邏輯
-├── README.md
-├── AGENT_PLAN.md
-├── ASK_HUMAN.md
-└── DEPENDENCIES.md
+├── line-personal/  → /data/personal/line-personal   CDP + PostgreSQL + FastAPI :8000
+└── line-official/  → /data/personal/line-official   Playwright + PostgreSQL + FastAPI :8001
 ```
 
-### 外部服務（獨立部署，非本 repo）
+---
 
-| 服務 | 位置 | 說明 |
-|------|------|------|
-| line-personal | `/data/personal/line-personal/` | Chrome CDP + PostgreSQL + FastAPI :8000 |
-| line-official | `/data/personal/line-official/` | Messaging API + webhook server（搬遷中） |
+## LINE 個人帳號（line-personal）
 
-## 使用指南 (Usage Guide)
+透過 Chrome CDP 掛接 LINE extension，不觸發已讀。
 
-### LINE 個人帳號 inbound
-
-LINE 個人帳號服務已獨立至 `/data/personal/line-personal/`（CDP + PostgreSQL + FastAPI）。
-
-Switchboard 的 `src/channels/line/personal/` 為薄 adapter，透過 API 呼叫消費：
+**啟動服務**
 
 ```bash
-# 啟動 line-personal 服務（在 /data/personal/line-personal/）
-bash scripts/ensure-services.sh   # sync daemon + media server
-
-# Switchboard 透過 HTTP API 取得訊息
-GET http://localhost:8000/messages
+cd /data/personal/line-personal
+podman-compose up -d
 ```
 
-詳細操作見 `/data/personal/line-personal/README.md`。
+**每日使用**
 
-## 實作原理 (Implementation Details)
+```bash
+# 確保服務在跑
+bash scripts/ensure-services.sh
 
-採用 **Functional Core, Imperative Shell** 架構：
+# 開 TUI 聊天介面
+uv run webapp/tui.py
 
-- **Channels**：各平台介接，只管收發，不含業務邏輯
-- **Processors**：純函式，raw 訊息 → 統一 Message schema
-- **Output**：任務輸出與 outbound 觸發
-- **Core**：Pipeline 協調，依賴注入，不硬編碼 channel
+# 媒體 SSH tunnel（在本機）
+ssh -L 8889:localhost:8889 user@server
+# 瀏覽器開 http://localhost:8889/
+```
 
-架構決策與邊界定義見 `.agent/rules/architecture.md`。
+**發送訊息**
 
-## 模組實作狀態
+```bash
+# 文字（不觸發已讀）
+uv run send_api.py --to <mid> --text "訊息"
 
-| 模組 | 狀態 | 位置 |
-|------|------|------|
-| LINE 個人服務（CDP + DB + API） | ✅ 已獨立 | `/data/personal/line-personal/` |
-| LINE 個人 channel adapter | ⬜ 待改寫為薄 adapter | `src/channels/line/personal/` |
-| LINE 官方服務（setup + webhook + push） | 🔄 搬遷中 | → `/data/personal/line-official/` |
-| LINE 官方 channel adapter | ⬜ | `src/channels/line/official/` |
-| Processors（訊息解析） | ✅ LINE personal | `src/processors/line_personal.py` |
-| Output（任務輸出） | ⬜ | |
-| Core pipeline | ⬜ | |
+# 圖片 / 影片 / 音訊 / 檔案
+uv run send_image.py  --to <mid> --file image.png
+uv run send_video.py  --to <mid> --file video.mp4
+uv run send_audio.py  --to <mid> --file audio.m4a
+uv run send_file.py   --to <mid> --file document.pdf
+
+# 收回訊息
+uv run send_api.py --unsend <msg_id>
+```
+
+**HTTP API（:8000）**
+
+```bash
+GET  /messages          # 取得訊息
+GET  /auth/status       # 登入狀態
+GET  /auth/qr           # 取得 QR code（未登入時）
+```
+
+詳細文件：`/data/personal/line-personal/README.md`
+
+---
+
+## LINE 官方帳號（line-official）
+
+透過 Playwright 爬蟲輪詢 chat.line.biz，訊息持久化至 PostgreSQL。
+
+**First-time setup**
+
+```bash
+cd /data/personal/line-official
+
+uv sync
+uv run playwright install chromium
+
+# 登入（掃 QR code）
+uv run login.py
+
+# 啟動服務
+docker-compose up -d
+```
+
+**HTTP API（:8001）**
+
+```bash
+# 查詢聊天室
+curl http://localhost:8001/chats
+
+# 查詢訊息
+curl "http://localhost:8001/chats/<chatId>/messages?limit=20"
+
+# 發送文字
+curl -X POST http://localhost:8001/chats/<chatId>/messages \
+     -H "Content-Type: application/json" \
+     -d '{"text": "訊息內容"}'
+
+# 發送圖片
+curl -X POST http://localhost:8001/chats/<chatId>/media \
+     -F "file=@/path/to/image.jpg"
+
+# 查看 daemon 狀態
+curl http://localhost:8001/health
+```
+
+詳細文件：`/data/personal/line-official/README.md`
