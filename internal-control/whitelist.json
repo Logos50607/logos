@@ -126,6 +126,24 @@
     "consumers": []
   },
   {
+    "name": "azure-tts-key",
+    "description": "Azure Cognitive Services TTS 金鑰",
+    "type": "file",
+    "path": "azure/tts-key",
+    "consumers": [
+      "personal/thai-material"
+    ]
+  },
+  {
+    "name": "azure-tts-region",
+    "description": "Azure TTS 服務區域（如 eastasia）",
+    "type": "file",
+    "path": "azure/tts-region",
+    "consumers": [
+      "personal/thai-material"
+    ]
+  },
+  {
     "name": "elevenlabs-api-key",
     "description": "ElevenLabs TTS API 金鑰（TODO：尚未填入）",
     "type": "file",
