@@ -25,5 +25,113 @@
     "consumers": [
       "liaison/switchboard"
     ]
+  },
+  {
+    "name": "gemini-api-key",
+    "description": "Google Gemini API 金鑰",
+    "type": "file",
+    "path": "gemini/api-key",
+    "consumers": [
+      "personal/real-asset-sale-kit",
+      "personal/switchboard-AI",
+      "education/global-disciplines"
+    ]
+  },
+  {
+    "name": "turso-real-asset-sale-kit-url",
+    "description": "Turso DB URL（real-asset-sale-kit 專用）",
+    "type": "file",
+    "path": "turso/real-asset-sale-kit/database-url",
+    "consumers": [
+      "personal/real-asset-sale-kit"
+    ]
+  },
+  {
+    "name": "turso-real-asset-sale-kit-token",
+    "description": "Turso Auth Token（real-asset-sale-kit 專用）",
+    "type": "file",
+    "path": "turso/real-asset-sale-kit/auth-token",
+    "consumers": [
+      "personal/real-asset-sale-kit"
+    ]
+  },
+  {
+    "name": "turso-thai-trip-2026-url",
+    "description": "Turso DB URL（thai-trip-2026 專用）",
+    "type": "file",
+    "path": "turso/thai-trip-2026/database-url",
+    "consumers": [
+      "personal/thai-trip-2026"
+    ]
+  },
+  {
+    "name": "turso-thai-trip-2026-token",
+    "description": "Turso Auth Token（thai-trip-2026 專用）",
+    "type": "file",
+    "path": "turso/thai-trip-2026/auth-token",
+    "consumers": [
+      "personal/thai-trip-2026"
+    ]
+  },
+  {
+    "name": "google-maps-api-key",
+    "description": "Google Maps API 金鑰",
+    "type": "file",
+    "path": "google/maps-api-key",
+    "consumers": [
+      "personal/thai-trip-2026"
+    ]
+  },
+  {
+    "name": "google-client-id",
+    "description": "Google OAuth Client ID",
+    "type": "file",
+    "path": "google/client-id",
+    "consumers": [
+      "personal/thai-trip-2026"
+    ]
+  },
+  {
+    "name": "google-client-secret",
+    "description": "Google OAuth Client Secret",
+    "type": "file",
+    "path": "google/client-secret",
+    "consumers": [
+      "personal/thai-trip-2026"
+    ]
+  },
+  {
+    "name": "thai-trip-2026-gps-token",
+    "description": "GPS 位置追蹤服務 token（thai-trip-2026 專用）",
+    "type": "file",
+    "path": "thai-trip-2026/gps-token",
+    "consumers": [
+      "personal/thai-trip-2026"
+    ]
+  },
+  {
+    "name": "gemini-browser-session",
+    "description": "Gemini 網頁登入 session（Playwright cookie，knowledge-base 爬蟲用）",
+    "type": "file",
+    "path": "browser-sessions/gemini.json",
+    "consumers": [
+      "personal/knowledge-base"
+    ]
+  },
+  {
+    "name": "anthropic-api-key",
+    "description": "Anthropic / Claude API 金鑰（TODO：尚未填入）",
+    "type": "file",
+    "path": "anthropic/api-key",
+    "consumers": []
+  },
+  {
+    "name": "elevenlabs-api-key",
+    "description": "ElevenLabs TTS API 金鑰（TODO：尚未填入）",
+    "type": "file",
+    "path": "elevenlabs/api-key",
+    "consumers": [
+      "personal/thai-material"
+    ]
   }
 ]
