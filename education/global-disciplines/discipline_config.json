@@ -27,9 +27,9 @@
         "disciplines": [
             {
                 "type": "rules",
-                "source": "/home/logos/.gemini/.agent/rules",
+                "source": "/home/logos/.gemini/GEMINI.md",
                 "target": "/home/logos/.claude/CLAUDE.md",
-                "link_type": "insert_text"
+                "link_type": "soft_link"
             },
             {
                 "type": "workflows",

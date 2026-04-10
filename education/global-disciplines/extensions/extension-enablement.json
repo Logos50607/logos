@@ -1,0 +1,7 @@
+{
+  "nanobanana": {
+    "overrides": [
+      "/home/logos/*"
+    ]
+  }
+}

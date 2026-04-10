@@ -1,21 +1,23 @@
 ---
 name: env-driven-config
 trigger: always_on
-description: "外部資料參照模式：當專案需要參照外部路徑、服務端點或機密設定時，一律以 .env 宣告，不得 hardcode，並提供 .env.example 作為文件。"
+description: "非 secret 的外部設定參照模式：路徑、端點、feature flag 等一律以 .env 宣告，不得 hardcode。Secret 值另見 secrets-management 規範。"
 ---
 
-# 外部資料參照規範 (Env-Driven External Config)
+# 外部設定參照規範 (Env-Driven External Config)
+
+## 適用範圍
+
+**本規範適用於非 secret 的可變設定**，例如：
+- 指向其他服務的 API 端點（如 `http://localhost:8000`）
+- 指向外部資料目錄的本地路徑（如 `/data/personal/line-personal/data`）
+- 可因部署環境不同而改變的 flag 或參數
+
+**Secret 值（API key、token、密碼）不適用本規範，改見 `secrets-management` 規則。**
 
 ## 核心規則
 
-**任何外部路徑、服務端點、API 金鑰或可因環境而異的設定，一律寫入 `.env`，不得 hardcode 於程式碼或 discipline 中。**
-
-## 適用情境
-
-- 指向其他服務的 API 端點（如 `http://localhost:8000`）
-- 指向外部資料目錄的本地路徑（如 `/data/personal/line-personal/data`）
-- 機密資訊（API key、token、密碼）
-- 可因部署環境不同而改變的任何值
+**任何可因環境而異的非 secret 設定，一律寫入 `.env`，不得 hardcode 於程式碼或 discipline 中。**
 
 ## 必備檔案
 
@@ -26,6 +28,10 @@ description: "外部資料參照模式：當專案需要參照外部路徑、服
 | `.env` | 實際值，**gitignored**，不進版控 |
 | `.env.example` | 範本，進版控，列出所有欄位、預設值與用途說明 |
 | `.gitignore` | 明確列出 `.env`（不依賴 global gitignore） |
+
+若專案同時有 secret（`.envrc`）和非 secret 設定（`.env`），兩者並存：
+- `.envrc`：讀 `/data/secrets/`，進版控
+- `.env`：非 secret 的環境設定，gitignored
 
 ## .env.example 格式要求
 
@@ -53,7 +59,7 @@ CLASSIFICATION_CONFIG=
 
 ## 禁止行為
 
-- 在 Python/Shell/JS 程式碼中直接寫死路徑、端點或金鑰
+- 在 Python/Shell/JS 程式碼中直接寫死路徑或端點
 - 在 `.md` discipline 中寫入任何環境特定路徑
-- 把 `.env`（含實際機密）commit 進 git
-- `.env.example` 中放入真實的 token 或密碼
+- 把 `.env`（含實際值）commit 進 git
+- 在 `.env` 或 `.env.example` 中放入 secret 值（→ 改用 `secrets-management` 流程）
