@@ -34,6 +34,8 @@ digest 維護自己的 PostgreSQL，**不與 liaison-channel 共用**。
 | `identity_channel_participant` | identity 在各 channel 的帳號對應 |
 | `identity_relation` | 兩個 identity 之間的有向關係 |
 | `identity_group` / `identity_group_member` | 自定義分群（VIP 客戶、家人…） |
+| `property_type` | 屬性型別定義（`text`\|`enum`\|`date`\|`boolean`），含 `allow_multiple` 與 enum 合法值清單 |
+| `identity_property` | identity 的屬性值，與 `property_type` 多對一 |
 | `event` | 有意義的事件，含分類、優先級、摘要、時間戳 |
 | `event_message` | event 與 channel 原始訊息的多對多 |
 | `event_identity` | event 涉及哪些 identity 及其角色 |
