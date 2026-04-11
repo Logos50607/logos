@@ -42,6 +42,49 @@ digest 維護自己的 PostgreSQL，**不與 liaison-channel 共用**。
 
 完整 DDL 見 [`db/schema.sql`](./db/schema.sql)。
 
+## API
+
+Digest 提供一支輕量 REST API（FastAPI，預設 `:8002`），供外部服務查詢 identity 資訊。
+
+### 啟動
+
+```bash
+cp .env.example .env   # 填入 DB_URL、LOGOS_IDENTITY_ID、API_PORT
+uv sync
+uv run uvicorn api:app --port 8002
+```
+
+### 端點
+
+#### `GET /identity/me/participants`
+
+回傳 `LOGOS_IDENTITY_ID`（`.env` 指定）在各 channel 的帳號。
+
+```json
+[
+  { "channel": "line_personal", "external_id": "UYXq4h…" }
+]
+```
+
+#### `GET /identity/{identity_id}/participants`
+
+回傳任意 identity 在各 channel 的帳號。
+
+| 狀態碼 | 說明 |
+|--------|------|
+| 200 | 成功，回傳 participant 清單 |
+| 404 | identity 不存在或無 participant |
+| 503 | `LOGOS_IDENTITY_ID` 未設定（`/me` 端點專屬） |
+
+### 目前已建立的 Identity
+
+| name | identity_id |
+|------|-------------|
+| 羅格致 | `9f95c093-f7ec-40eb-aad7-268dd0e843e9` |
+| OPENLOHAS | `c20aaeb4-3100-4147-8625-72a3237c9473` |
+| Josh | `9ad9530b-c0e4-49c6-a2f4-bf2ef9974037` |
+| Mox | `08a34b60-966c-4e88-87ae-7e3d8114d068` |
+
 ## 結構
 
 ```
@@ -52,7 +95,10 @@ digest/
 │       ├── classification.md    # 訊息分類與評級依據
 │       └── reporting.md         # 呈報 channel 與時機
 ├── db/
-│   └── schema.sql               # PostgreSQL DDL
+│   ├── schema.sql               # PostgreSQL DDL
+│   └── setup.sh                 # 初始化腳本（建表）
+├── api.py                       # FastAPI — identity / participant 查詢
+├── pyproject.toml
 ├── .env                         # 實際路徑與設定（gitignored）
 ├── .env.example                 # 設定範本
 ├── README.md
@@ -61,11 +107,15 @@ digest/
 
 ## 設定方式
 
-複製 `.env.example` 為 `.env`，填入各 channel 的 API 端點與呈報目標：
-
 ```bash
 cp .env.example .env
-# 編輯 .env，填入實際值
+# 填入 DB_URL、LOGOS_IDENTITY_ID、API_PORT 及各 channel 端點
+```
+
+初次建立資料庫：
+
+```bash
+sh db/setup.sh
 ```
 
 詳細欄位說明見 `.env.example`。
