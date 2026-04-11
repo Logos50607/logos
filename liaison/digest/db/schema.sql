@@ -40,7 +40,6 @@ CREATE INDEX IF NOT EXISTS ip_identity ON identity_property (identity_id);
 CREATE TABLE IF NOT EXISTS identity (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name       TEXT NOT NULL,
-    notes      TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -118,8 +117,7 @@ CREATE TABLE IF NOT EXISTS task (
     title           TEXT NOT NULL,
     description     TEXT,
     source_event_id UUID REFERENCES event(id) ON DELETE SET NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS task_source ON task (source_event_id);
 
