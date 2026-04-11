@@ -62,7 +62,8 @@ async def fetch_participants(identity_id: str) -> list[dict]:
 async def get_my_participants():
     if not LOGOS_IDENTITY_ID:
         raise HTTPException(status_code=503, detail="LOGOS_IDENTITY_ID 未設定")
-    return await fetch_participants(LOGOS_IDENTITY_ID)
+    participants = await fetch_participants(LOGOS_IDENTITY_ID)
+    return {"identity_id": LOGOS_IDENTITY_ID, "participants": participants}
 
 
 @app.get("/identity/{identity_id}/participants")

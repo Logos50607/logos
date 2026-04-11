@@ -63,9 +63,12 @@ uv run uvicorn api:app --port 8002
 回傳 `LOGOS_IDENTITY_ID`（`.env` 指定）在各 channel 的帳號。
 
 ```json
-[
-  { "channel": "line_personal", "external_id": "UYXq4h…" }
-]
+{
+  "identity_id": "9f95c093-…",
+  "participants": [
+    { "channel": "line_personal", "external_id": "UYXq4h…" }
+  ]
+}
 ```
 
 #### `GET /identity/{identity_id}/participants`
