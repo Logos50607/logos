@@ -57,9 +57,31 @@ CLASSIFICATION_CONFIG=
 
 若使用 symlink，setup 腳本（如 `setup.sh`）須從 `.env` 讀取目標路徑並建立連結，**不得硬編碼 symlink 目標**。
 
+## 容器化部署（Docker / Podman Compose）
+
+**Compose 檔案是公開的部署規範，不得假設使用者的主機目錄結構。**
+
+- **volume mount 路徑必須來自 env var**，不得硬編碼主機端路徑（`/data/secrets/xxx:/secrets/xxx` 這類寫法是禁止的）
+- 可選功能的 env var **預設值必須為空**（`${VAR:-}`），讓使用者自行決定是否啟用
+- 若功能需要額外 volume，應在 `.env.example` 的說明中告知使用者自行在 compose override 加入，**不代勞**
+
+```yaml
+# ❌ 錯誤：硬編碼開發者自己的主機路徑
+volumes:
+  - /data/secrets/line-personal:/secrets/line-personal
+
+# ✅ 正確：env var 控制，預設空值（功能可選）
+environment:
+  LINE_PERSONAL_SECRETS_DIR: ${LINE_PERSONAL_SECRETS_DIR:-}
+# 使用者若需要，自行在 compose override 加 volume
+```
+
+**核心思維**：你在開發時認為「理所當然」的目錄、掛載、網路設定，對其他使用者可能完全不存在。寫設定檔時，站在第一次 clone 此 repo 的人的角度思考。
+
 ## 禁止行為
 
 - 在 Python/Shell/JS 程式碼中直接寫死路徑或端點
 - 在 `.md` discipline 中寫入任何環境特定路徑
 - 把 `.env`（含實際值）commit 進 git
 - 在 `.env` 或 `.env.example` 中放入 secret 值（→ 改用 `secrets-management` 流程）
+- 在 compose 檔案中硬編碼只在開發者主機存在的 volume 掛載路徑
