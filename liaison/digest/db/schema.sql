@@ -83,13 +83,14 @@ CREATE TABLE IF NOT EXISTS identity_group_member (
 -- ── Event ─────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS event (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    summary     TEXT,
-    category    TEXT NOT NULL,   -- 'task' | 'question' | 'info' | 'social' | 'alert' | 'unknown'
-    priority    TEXT NOT NULL,   -- 'critical' | 'high' | 'normal' | 'low'
-    occurred_at TIMESTAMPTZ NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    reported_at TIMESTAMPTZ
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    summary                TEXT,
+    category               TEXT NOT NULL,   -- 'task' | 'question' | 'info' | 'social' | 'alert' | 'unknown'
+    priority               TEXT NOT NULL,   -- 'critical' | 'high' | 'normal' | 'low'
+    occurred_at            TIMESTAMPTZ NOT NULL,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reported_at            TIMESTAMPTZ,
+    source_conversation_id TEXT             -- channel 端的 conversation external_id（群組或個人對話）
 );
 CREATE INDEX IF NOT EXISTS event_occurred ON event (occurred_at DESC);
 CREATE INDEX IF NOT EXISTS event_priority ON event (priority, occurred_at DESC);
@@ -97,11 +98,9 @@ CREATE INDEX IF NOT EXISTS event_priority ON event (priority, occurred_at DESC);
 -- event 與 channel 原始訊息的多對多
 CREATE TABLE IF NOT EXISTS event_message (
     event_id            UUID NOT NULL REFERENCES event(id) ON DELETE CASCADE,
-    channel             TEXT NOT NULL,
     external_message_id TEXT NOT NULL,
-    PRIMARY KEY (event_id, channel, external_message_id)
+    PRIMARY KEY (event_id, external_message_id)
 );
-CREATE INDEX IF NOT EXISTS em_channel_msg ON event_message (channel, external_message_id);
 
 -- event 涉及哪些 identity
 CREATE TABLE IF NOT EXISTS event_identity (
