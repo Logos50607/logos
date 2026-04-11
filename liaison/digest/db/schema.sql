@@ -26,7 +26,9 @@ INSERT INTO property_type (name, value_type, allow_multiple, allowed_values, des
     ('fetish',           'text',    true,  NULL,                                             '性癖，自由填寫'),
     ('gender',           'enum',    false, ARRAY['male','female','non-binary','other'],      '性別'),
     ('occupation',       'text',    false, NULL,                                             '職稱 / 角色'),
-    ('note',             'text',    true,  NULL,                                             '備註')
+    ('note',             'text',    true,  NULL,                                             '備註'),
+    ('role',             'text',    false, NULL,                                             'relation 中的角色（如 PM、BD、技術主管）'),
+    ('temporal',         'enum',    false, ARRAY['current','past'],                          '關係的時間性：current（現在）或 past（過去）')
 ON CONFLICT (name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS identity (
