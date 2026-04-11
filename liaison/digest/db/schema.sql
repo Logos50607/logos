@@ -3,6 +3,40 @@
 
 -- ── Identity ──────────────────────────────────────────────────────────
 
+-- Property 型別定義（含基礎 seed，應用層負責驗證）
+CREATE TABLE IF NOT EXISTS property_type (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name           TEXT NOT NULL UNIQUE,
+    value_type     TEXT NOT NULL DEFAULT 'text',  -- 'text' | 'enum' | 'date' | 'boolean'
+    allow_multiple BOOLEAN NOT NULL DEFAULT FALSE,
+    allowed_values TEXT[],   -- enum 時列出合法選項，其他 NULL
+    description    TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO property_type (name, value_type, allow_multiple, allowed_values, description) VALUES
+    ('real_name',         'text',    false, NULL,                                          '本名'),
+    ('nickname',          'text',    true,  NULL,                                          '慣用暱稱，可多個'),
+    ('birthday',          'date',    false, NULL,                                          '生日（YYYY-MM-DD）'),
+    ('phone',             'text',    true,  NULL,                                          '電話號碼'),
+    ('email',             'text',    true,  NULL,                                          'Email'),
+    ('interest',          'text',    true,  NULL,                                          '興趣 / 關注領域'),
+    ('sexual_orientation','enum',    true,  ARRAY['female','male','both','non-human'],     '性吸引對象，可多選'),
+    ('fetish',            'text',    true,  NULL,                                          '性癖，自由填寫'),
+    ('gender',            'enum',    false, ARRAY['male','female','non-binary','other'],   '性別'),
+    ('note',              'text',    true,  NULL,                                          '備註')
+ON CONFLICT (name) DO NOTHING;
+
+-- identity 的屬性值（與 property_type 多對一）
+CREATE TABLE IF NOT EXISTS identity_property (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    identity_id      UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+    property_type_id UUID NOT NULL REFERENCES property_type(id),
+    value            TEXT NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ip_identity ON identity_property (identity_id);
+
 CREATE TABLE IF NOT EXISTS identity (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name       TEXT NOT NULL,
