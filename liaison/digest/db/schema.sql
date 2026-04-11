@@ -15,17 +15,25 @@ CREATE TABLE IF NOT EXISTS property_type (
 );
 
 INSERT INTO property_type (name, value_type, allow_multiple, allowed_values, description) VALUES
-    ('real_name',         'text',    false, NULL,                                          '本名'),
-    ('nickname',          'text',    true,  NULL,                                          '慣用暱稱，可多個'),
-    ('birthday',          'date',    false, NULL,                                          '生日（YYYY-MM-DD）'),
-    ('phone',             'text',    true,  NULL,                                          '電話號碼'),
-    ('email',             'text',    true,  NULL,                                          'Email'),
-    ('interest',          'text',    true,  NULL,                                          '興趣 / 關注領域'),
-    ('sexual_orientation','enum',    true,  ARRAY['female','male','both','non-human'],     '性吸引對象，可多選'),
-    ('fetish',            'text',    true,  NULL,                                          '性癖，自由填寫'),
-    ('gender',            'enum',    false, ARRAY['male','female','non-binary','other'],   '性別'),
-    ('note',              'text',    true,  NULL,                                          '備註')
+    ('kind',             'enum',    false, ARRAY['personal','group'],                        'identity 類型：personal（自然人）或 group（組織／專案）'),
+    ('real_name',        'text',    false, NULL,                                             '本名'),
+    ('nickname',         'text',    true,  NULL,                                             '慣用暱稱，可多個'),
+    ('birthday',         'date',    false, NULL,                                             '生日（YYYY-MM-DD）'),
+    ('phone',            'text',    true,  NULL,                                             '電話號碼'),
+    ('email',            'text',    true,  NULL,                                             'Email'),
+    ('interest',         'text',    true,  NULL,                                             '興趣 / 關注領域'),
+    ('sexual_orientation','enum',   true,  ARRAY['female','male','both','non-human'],        '性吸引對象，可多選'),
+    ('fetish',           'text',    true,  NULL,                                             '性癖，自由填寫'),
+    ('gender',           'enum',    false, ARRAY['male','female','non-binary','other'],      '性別'),
+    ('occupation',       'text',    false, NULL,                                             '職稱 / 角色'),
+    ('note',             'text',    true,  NULL,                                             '備註')
 ON CONFLICT (name) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS identity (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- identity 的屬性值（與 property_type 多對一）
 CREATE TABLE IF NOT EXISTS identity_property (
@@ -37,47 +45,36 @@ CREATE TABLE IF NOT EXISTS identity_property (
 );
 CREATE INDEX IF NOT EXISTS ip_identity ON identity_property (identity_id);
 
-CREATE TABLE IF NOT EXISTS identity (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 -- identity 在各 channel 的帳號（跨 channel 對應）
 CREATE TABLE IF NOT EXISTS identity_channel_participant (
     identity_id UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
-    channel     TEXT NOT NULL,   -- 'line-personal' | 'line-oa' | 'discord' ...
+    channel     TEXT NOT NULL,   -- 'line_personal' | 'line_official' | 'instagram' ...
     external_id TEXT NOT NULL,   -- platform 原始 participant ID
     PRIMARY KEY (channel, external_id)
 );
 CREATE INDEX IF NOT EXISTS icp_identity ON identity_channel_participant (identity_id);
 
--- 兩個 identity 之間的有向關係
+-- 兩個 identity 之間的有向關係（人↔人、人↔組織、組織↔組織）
+-- relation_type: 'colleague' | 'partner' | 'family' | 'friend' | 'client' | 'belongs_to' ...
 CREATE TABLE IF NOT EXISTS identity_relation (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     from_identity_id UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
     to_identity_id   UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
-    relation_type    TEXT NOT NULL,   -- 'client' | 'colleague' | 'family' | 'friend' ...
-    notes            TEXT,
+    relation_type    TEXT NOT NULL,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ir_from ON identity_relation (from_identity_id);
 CREATE INDEX IF NOT EXISTS ir_to   ON identity_relation (to_identity_id);
 
--- 自定義分群（VIP 客戶、家人、某公司成員…）
-CREATE TABLE IF NOT EXISTS identity_group (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        TEXT NOT NULL,
-    description TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- relation 的屬性值（如 role: PM、BD；note: 說明文字）
+CREATE TABLE IF NOT EXISTS identity_relation_property (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    relation_id      UUID NOT NULL REFERENCES identity_relation(id) ON DELETE CASCADE,
+    property_type_id UUID NOT NULL REFERENCES property_type(id),
+    value            TEXT NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE TABLE IF NOT EXISTS identity_group_member (
-    group_id    UUID NOT NULL REFERENCES identity_group(id) ON DELETE CASCADE,
-    identity_id UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
-    role        TEXT,   -- 選填，如 'lead' | 'member'
-    PRIMARY KEY (group_id, identity_id)
-);
+CREATE INDEX IF NOT EXISTS irp_relation ON identity_relation_property (relation_id);
 
 -- ── Event ─────────────────────────────────────────────────────────────
 
