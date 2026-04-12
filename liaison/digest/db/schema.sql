@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS identity_property (
     identity_id      UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
     property_type_id UUID NOT NULL REFERENCES property_type(id),
     value            TEXT NOT NULL,
-    source           JSONB,   -- 推論來源：["msg_uuid1", "msg_uuid2"]，對應 line_official.messages.id
+    reviewable_id    UUID REFERENCES reviewable(id) ON DELETE SET NULL,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ip_identity ON identity_property (identity_id);
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS identity_relation (
     from_identity_id UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
     to_identity_id   UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
     relation_type    TEXT NOT NULL,
-    source           JSONB,   -- 推論來源：["msg_uuid1", "msg_uuid2"]，對應 line_official.messages.id
+    reviewable_id    UUID REFERENCES reviewable(id) ON DELETE SET NULL,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ir_from ON identity_relation (from_identity_id);
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS identity_relation_property (
     relation_id      UUID NOT NULL REFERENCES identity_relation(id) ON DELETE CASCADE,
     property_type_id UUID NOT NULL REFERENCES property_type(id),
     value            TEXT NOT NULL,
-    source           JSONB,   -- 推論來源：["msg_uuid1", "msg_uuid2"]，對應 line_official.messages.id
+    reviewable_id    UUID REFERENCES reviewable(id) ON DELETE SET NULL,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS irp_relation ON identity_relation_property (relation_id);
@@ -133,6 +133,29 @@ CREATE TABLE IF NOT EXISTS task_log (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS tl_task ON task_log (task_id, created_at DESC);
+
+-- ── Reviewable ────────────────────────────────────────────────────────
+
+-- 可被評審的推論單元：任何 identity_property / identity_relation / identity_relation_property
+-- 建立時必須提供 message_ids，不允許空陣列（無來源的推論不應存在）
+CREATE TABLE IF NOT EXISTS reviewable (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_ids UUID[] NOT NULL,   -- 推論所依據的訊息 UUID 陣列，對應 liaison.messages.id
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 評審紀錄（一個 reviewable 可被多個 agent 多次評審）
+CREATE TABLE IF NOT EXISTS reviewable_review (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reviewable_id UUID NOT NULL REFERENCES reviewable(id) ON DELETE CASCADE,
+    reliability   SMALLINT,        -- 信度 1–5：這組 message 能否支撐推論？
+    validity      SMALLINT,        -- 效度 1–5：這組 message 是否為正確取樣？
+    reason        TEXT NOT NULL,   -- 必填：說明評分依據與推論過程
+    reviewed_by   TEXT NOT NULL,   -- 執行評審的 agent 名稱
+    reviewed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at    TIMESTAMPTZ      -- 軟刪除，保留歷史評審紀錄
+);
+CREATE INDEX IF NOT EXISTS rr_reviewable ON reviewable_review (reviewable_id);
 
 -- ── Views ─────────────────────────────────────────────────────────────
 

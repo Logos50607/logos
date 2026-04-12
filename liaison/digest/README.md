@@ -28,14 +28,28 @@ digest 維護自己的 PostgreSQL，**不與 liaison-channel 共用**。
 
 ### 主要資料表
 
+**Identity 層**
+
 | 表 | 說明 |
 |----|------|
-| `identity` | 跨 channel 的真實人物 |
+| `identity` | 跨 channel 的人或組織（`kind=personal/group`） |
 | `identity_channel_participant` | identity 在各 channel 的帳號對應 |
-| `identity_relation` | 兩個 identity 之間的有向關係 |
-| `identity_group` / `identity_group_member` | 自定義分群（VIP 客戶、家人…） |
 | `property_type` | 屬性型別定義（`text`\|`enum`\|`date`\|`boolean`），含 `allow_multiple` 與 enum 合法值清單 |
-| `identity_property` | identity 的屬性值，與 `property_type` 多對一 |
+| `identity_property` | identity 本身的屬性值（性別、住所、職稱…），含 `reviewable_id` |
+| `identity_relation` | 兩個 identity 之間的有向關係，含 `reviewable_id` |
+| `identity_relation_property` | 關係本身的屬性（角色、時間性、備註），含 `reviewable_id` |
+
+**Reviewable 層**（推論來源與信效度評審）
+
+| 表 | 說明 |
+|----|------|
+| `reviewable` | 任何可被評審的推論單元，記錄支撐推論的 `message_ids`（對應 `liaison.messages.id`） |
+| `reviewable_review` | review agent 的評審紀錄，含信度、效度、reason、reviewed_by，支援軟刪除 |
+
+**Event / Task 層**
+
+| 表 | 說明 |
+|----|------|
 | `event` | 有意義的事件，含分類、優先級、摘要、時間戳 |
 | `event_message` | event 與 channel 原始訊息的多對多 |
 | `event_identity` | event 涉及哪些 identity 及其角色 |

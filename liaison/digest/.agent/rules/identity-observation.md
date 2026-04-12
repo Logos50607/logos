@@ -42,15 +42,29 @@ description: "對話中觀察到任何 identity（人或組織）的特質、關
 
 ## 寫入格式
 
+每筆 claim（property / relation / relation_property）寫入時，**必須同步建立 `reviewable` 並填入 `reviewable_id`**。沒有 reviewable 的 claim 無法被 agent 評審。
+
 ```sql
--- 人物特質
-INSERT INTO identity_property (identity_id, property_type_id, value)
-SELECT '<uuid>', id, '<觀察內容>' FROM property_type WHERE name = 'note';
+-- 1. 建立 reviewable（來源訊息 UUID 陣列，對應 liaison.messages.id）
+INSERT INTO reviewable (message_ids)
+VALUES (ARRAY['<msg_uuid_1>'::uuid, '<msg_uuid_2>'::uuid])
+RETURNING id INTO rv_id;
+
+-- 2. 寫入 claim，帶入 reviewable_id
+INSERT INTO identity_property (identity_id, property_type_id, value, reviewable_id)
+SELECT '<identity_uuid>', id, '<觀察內容>', rv_id FROM property_type WHERE name = 'note';
 
 -- 隸屬關係
-INSERT INTO identity_relation (from_identity_id, to_identity_id, relation_type)
-VALUES ('<person_uuid>', '<org_uuid>', 'belongs_to');
+INSERT INTO reviewable (message_ids) VALUES (ARRAY['<msg_uuid>'::uuid]) RETURNING id INTO rv_id;
+INSERT INTO identity_relation (from_identity_id, to_identity_id, relation_type, reviewable_id)
+VALUES ('<person_uuid>', '<org_uuid>', 'belongs_to', rv_id);
 ```
+
+## Reviewable 規範
+
+- `reviewable.message_ids`：支撐此推論的訊息 UUID 陣列（`liaison.messages.id`），**不允許空陣列**
+- 信效度評分由獨立 review agent 執行，寫入 `reviewable_review`，本 agent 不自評
+- `reviewable_review.reason` 為必填：評審 agent 須說明評分依據
 
 ## 不寫入的情境
 
