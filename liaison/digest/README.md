@@ -101,8 +101,10 @@ uv run uvicorn api:app --port 8002
 
 ### 目前已建立的 Identity
 
-| name | identity_id |
-|------|-------------|
+`identity` 表已不含 `name` 欄，顯示名稱統一存於 `identity_property`（type = `nickname` / `real_name`）。
+
+| nickname | identity_id |
+|----------|-------------|
 | 羅格致 | `9f95c093-f7ec-40eb-aad7-268dd0e843e9` |
 | OPENLOHAS | `c20aaeb4-3100-4147-8625-72a3237c9473` |
 | Josh | `9ad9530b-c0e4-49c6-a2f4-bf2ef9974037` |

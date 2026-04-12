@@ -7,4 +7,6 @@ dependencies = [
     "uvicorn[standard]",
     "asyncpg",
     "python-dotenv",
+    "psycopg2-binary>=2.9.11",
+    "requests>=2.33.1",
 ]
