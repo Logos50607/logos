@@ -10,13 +10,33 @@ description: "對話中觀察到任何 identity（人或組織）的特質、關
 
 對話中每當得知任何 identity 的新資訊，**必須立即寫入 digest DB**，不得只停在記憶裡等之後補。
 
+## Property vs Relation vs Relation Property
+
+**`identity_property`** = 這個人**本身**的屬性，拿掉所有關係之後還成立的事實
+- 性別、名字、生日、住哪、職業、電話、興趣、性癖、性向、綽號
+- 判斷標準：即使不認識 Logos，這件事對這個人還成立嗎？→ 成立則放 property
+
+**`identity_relation`** = 兩個 identity 之間的**連結**，必須有兩端才存在
+- 朋友、同事、戀人、屬於某組織
+
+**`identity_relation_property`** = 這段**連結本身**的屬性，描述關係的性質、脈絡、動態
+- 在這段關係裡的角色（PM、BD）
+- 這段關係是現在還是過去（current / past）
+- 這段關係的備註：怎麼認識、互動性質、發生過什麼事
+
+**判斷方式**：把這個人從所有關係中抽離，資訊還成立嗎？
+- 成立 → `identity_property`（例：某人住台南、綽號「阿海」、喜歡爬山）
+- 不成立 → `identity_relation_property`（例：兩人是透過朋友介紹認識、合作關係已結束）
+
 ## 適用情境
 
 | 觀察類型 | 寫入目標 |
 |----------|----------|
-| 本名、暱稱、生日、職稱… | `identity_property` |
-| 個性、行為傾向、喜好 | `identity_property`（`note` type，可多筆） |
-| 與他人的關係 | `identity_relation` + `identity_relation_property` |
+| 本名、暱稱、生日、職稱、住所、性別、性向… | `identity_property` |
+| 個性、行為傾向、喜好、身體特徵 | `identity_property`（`note` 或對應 type） |
+| 與他人的關係 | `identity_relation` |
+| 關係的性質、脈絡、互動動態 | `identity_relation_property`（`note` type） |
+| 在某段關係中的角色 | `identity_relation_property`（`role` type） |
 | 隸屬公司、專案 | `identity_relation`（relation_type = `belongs_to`） |
 | 公司、專案的定位 | `identity_property`（`note` type） |
 
@@ -40,5 +60,5 @@ VALUES ('<person_uuid>', '<org_uuid>', 'belongs_to');
 ## DB 連線
 
 ```
-postgresql://line:line@localhost:5433/digest
+postgresql://liaison:P7I-B4rS_qIemR0T1Fwsgc1xNoxhdIAM@localhost:5433/digest
 ```

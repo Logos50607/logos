@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS identity_property (
     identity_id      UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
     property_type_id UUID NOT NULL REFERENCES property_type(id),
     value            TEXT NOT NULL,
+    source           JSONB,   -- 推論來源：["msg_uuid1", "msg_uuid2"]，對應 line_official.messages.id
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ip_identity ON identity_property (identity_id);
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS identity_relation (
     from_identity_id UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
     to_identity_id   UUID NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
     relation_type    TEXT NOT NULL,
+    source           JSONB,   -- 推論來源：["msg_uuid1", "msg_uuid2"]，對應 line_official.messages.id
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ir_from ON identity_relation (from_identity_id);
@@ -74,6 +76,7 @@ CREATE TABLE IF NOT EXISTS identity_relation_property (
     relation_id      UUID NOT NULL REFERENCES identity_relation(id) ON DELETE CASCADE,
     property_type_id UUID NOT NULL REFERENCES property_type(id),
     value            TEXT NOT NULL,
+    source           JSONB,   -- 推論來源：["msg_uuid1", "msg_uuid2"]，對應 line_official.messages.id
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS irp_relation ON identity_relation_property (relation_id);
