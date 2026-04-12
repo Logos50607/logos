@@ -10,6 +10,8 @@ description: "對話中觀察到任何 identity（人或組織）的特質、關
 
 對話中每當得知任何 identity 的新資訊，**必須立即寫入 digest DB**，不得只停在記憶裡等之後補。
 
+**Logos 本人也是觀察對象。** 分析任何人的對話時，若從中發現與 Logos 有關的事實（他說的話透露的特質、他的處境、他描述自己的方式），同樣要寫入他的 `identity_property`，而不只是更新對方的資料。使用者直接告知的事實（如婚姻日期、出身地）亦同。
+
 ## Property vs Relation vs Relation Property
 
 **`identity_property`** = 這個人**本身**的屬性，拿掉所有關係之後還成立的事實
