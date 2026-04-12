@@ -150,7 +150,8 @@ CREATE TABLE IF NOT EXISTS reviewable_review (
     reviewable_id UUID NOT NULL REFERENCES reviewable(id) ON DELETE CASCADE,
     reliability   SMALLINT,        -- 信度 1–5：這組 message 能否支撐推論？
     validity      SMALLINT,        -- 效度 1–5：這組 message 是否為正確取樣？
-    reason        TEXT NOT NULL,   -- 必填：說明評分依據與推論過程
+    atomicity     SMALLINT,        -- 原子性 1–5：此 claim 是否為單一事實？（低分時在 reason 說明如何拆分）
+    reason        TEXT NOT NULL,   -- 必填：說明評分依據；atomicity 低分時須說明建議拆法
     reviewed_by   TEXT NOT NULL,   -- 執行評審的 agent 名稱
     reviewed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at    TIMESTAMPTZ      -- 軟刪除，保留歷史評審紀錄

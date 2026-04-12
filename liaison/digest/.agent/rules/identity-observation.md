@@ -105,8 +105,8 @@ SELECT '<identity_uuid>', id, '<值>', rv_id FROM property_type WHERE name = '<t
 
 - `reviewable.message_ids`：**不允許空陣列**，每筆 claim 必須有至少一則來源訊息
 - 來源可混合：使用者訊息 + AI 推論訊息皆可放入同一 `message_ids`
-- 信效度評分由獨立 review agent 執行，本 agent 不自評
-- `reviewable_review.reason` 為必填
+- 信效度與原子性評分由獨立 review agent 執行，本 agent 不自評
+- `reviewable_review.reason` 為必填；`atomicity` 低分時須在 reason 中說明建議如何拆分
 
 ## 不寫入的情境
 
