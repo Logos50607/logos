@@ -46,6 +46,10 @@ digest 維護自己的 PostgreSQL，**不與 liaison-channel 共用**。
 | `reviewable` | 任何可被評審的推論單元，記錄支撐推論的 `message_ids`（對應 `liaison.messages.id`） |
 | `reviewable_review` | review agent 的評審紀錄，含信度、效度、reason、reviewed_by，支援軟刪除 |
 
+`message_ids` 可引用兩種來源，均存於 liaison channel（channel = `claude-code-session`）：
+- **使用者訊息**（`sender_external_id = logos`）：直接告知的事實、糾正
+- **AI 推論訊息**（`sender_external_id = claude-code`）：agent 從資料推論的結果，推論過程寫入 `text`
+
 **Event / Task 層**
 
 | 表 | 說明 |

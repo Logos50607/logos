@@ -40,31 +40,73 @@ description: "對話中觀察到任何 identity（人或組織）的特質、關
 | 隸屬公司、專案 | `identity_relation`（relation_type = `belongs_to`） |
 | 公司、專案的定位 | `identity_property`（`note` type） |
 
-## 寫入格式
+## 誰是合法的訊息來源
 
-每筆 claim（property / relation / relation_property）寫入時，**必須同步建立 `reviewable` 並填入 `reviewable_id`**。沒有 reviewable 的 claim 無法被 agent 評審。
+`reviewable.message_ids` 可以引用兩種 sender 的訊息，兩者都是有效來源：
+
+| Sender | channel | sender_external_id | 說明 |
+|--------|---------|-------------------|------|
+| 使用者（Logos） | `claude-code-session` | `logos` | 直接告知的事實、糾正、補充 |
+| AI agent（本 agent） | `claude-code-session` | `claude-code` | 從對話或 channel 資料做的推論，推論過程需寫清楚 |
+
+**AI agent 必須把推論過程寫成訊息存入 channel，才能作為 reviewable 的來源。**
+
+推論訊息的格式（`text` 欄位）：
+
+```
+[推論] identity: <name>，property: <type>=<value>
+依據：從 <channel> 對話 <conv_external_id> 中，<具體觀察>，推論出 <結論>。
+```
+
+或對話推論：
+
+```
+[推論] identity: <name> 與 <name2>，relation: <type>
+依據：<具體訊息內容或行為模式>，推論兩者為 <relation>。
+```
+
+## 寫入流程
+
+每筆 claim 寫入步驟：
+
+1. **POST 推論訊息至 channel**（若來源是 AI 推論）
+
+```
+POST http://localhost:8080/messages
+{
+  "channel": "claude-code-session",
+  "conversation_external_id": "<session_id>",
+  "sender_external_id": "claude-code",
+  "sender_name": "Claude",
+  "content_type": "text",
+  "text": "[推論] ...",
+  "created_at": <now_ms>,
+  "external_id": "<本 agent 自訂的唯一 id>"
+}
+→ 回傳 message_id
+```
+
+2. **建立 reviewable**
 
 ```sql
--- 1. 建立 reviewable（來源訊息 UUID 陣列，對應 liaison.messages.id）
 INSERT INTO reviewable (message_ids)
-VALUES (ARRAY['<msg_uuid_1>'::uuid, '<msg_uuid_2>'::uuid])
+VALUES (ARRAY['<message_id>'::uuid, ...])
 RETURNING id INTO rv_id;
+```
 
--- 2. 寫入 claim，帶入 reviewable_id
+3. **寫入 claim**
+
+```sql
 INSERT INTO identity_property (identity_id, property_type_id, value, reviewable_id)
-SELECT '<identity_uuid>', id, '<觀察內容>', rv_id FROM property_type WHERE name = 'note';
-
--- 隸屬關係
-INSERT INTO reviewable (message_ids) VALUES (ARRAY['<msg_uuid>'::uuid]) RETURNING id INTO rv_id;
-INSERT INTO identity_relation (from_identity_id, to_identity_id, relation_type, reviewable_id)
-VALUES ('<person_uuid>', '<org_uuid>', 'belongs_to', rv_id);
+SELECT '<identity_uuid>', id, '<值>', rv_id FROM property_type WHERE name = '<type>';
 ```
 
 ## Reviewable 規範
 
-- `reviewable.message_ids`：支撐此推論的訊息 UUID 陣列（`liaison.messages.id`），**不允許空陣列**
-- 信效度評分由獨立 review agent 執行，寫入 `reviewable_review`，本 agent 不自評
-- `reviewable_review.reason` 為必填：評審 agent 須說明評分依據
+- `reviewable.message_ids`：**不允許空陣列**，每筆 claim 必須有至少一則來源訊息
+- 來源可混合：使用者訊息 + AI 推論訊息皆可放入同一 `message_ids`
+- 信效度評分由獨立 review agent 執行，本 agent 不自評
+- `reviewable_review.reason` 為必填
 
 ## 不寫入的情境
 
