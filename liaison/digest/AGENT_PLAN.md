@@ -1,5 +1,8 @@
 # AGENT_PLAN — digest
 
+- [ ] 2026-04-13 實作定期語意去重掃描器：對每個 identity 比對 note 與具名 property type 是否語意重疊，產出候選清單供人工或 AI 確認後 soft-delete
+      設計：LLM 判斷，不在寫入路徑上執行；輸出候選清單而非自動刪除
+
 - [x] 2026-04-10 設計資料庫 schema
       執行：建立 db/schema.sql，涵蓋 identity、event、task 三個語意層；更新 README
       驗證：schema.sql 含完整 DDL、views，README 已補資料庫設計說明
