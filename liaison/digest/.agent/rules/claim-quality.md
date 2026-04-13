@@ -63,7 +63,19 @@ ORDER BY m.created_at;
 - 地點判斷是否有依據
 - 時間點的前後文是否支持結論
 
-## 6. 現有 compound notes 的處理
+## 6. occupation 原子化規範
+
+occupation 欄位只記錄**職稱或單位**，不附帶原因、背景或評語。
+
+```
+❌ "匠說集團 適才 BD：向企業推廣 SaaS 系統，但與入職談定的「主導教學產品與服務」不符"
+✓  occupation = "匠說集團 適才 BD"
+✓  note = "入職承諾主導教學產品，實際被安排做 BD"
+```
+
+occupation 若含時間範圍以外的敘述，必須拆分：職稱留 occupation，原因/背景改 note。
+
+## 7. 現有 compound notes 的處理
 
 發現現有 compound note（value 中含分號或多個子句）時，應：
 1. 拆分為多條原子 note
