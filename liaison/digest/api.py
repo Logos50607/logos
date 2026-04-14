@@ -13,7 +13,7 @@ import os
 import asyncpg
 import httpx
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -143,12 +143,21 @@ class OverlandPayload(BaseModel):
 
 
 @app.post("/gps")
-async def receive_gps(payload: OverlandPayload, token: str = ""):
+async def receive_gps(request: Request, token: str = ""):
+    import json as _json
+    body_bytes = await request.body()
+
+    # Overland sends token as "Authorization: Bearer <token>"
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:]
+
     if GPS_TOKEN and token != GPS_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
     if not TURSO_URL or not TURSO_TOKEN:
         raise HTTPException(status_code=503, detail="TURSO_URL / TURSO_TOKEN 未設定")
 
+    payload = OverlandPayload(**_json.loads(body_bytes))
     last = await _turso_last_location()
     inserted = 0
 
@@ -157,8 +166,7 @@ async def receive_gps(payload: OverlandPayload, token: str = ""):
         if len(coords) < 2:
             continue
         lng, lat = float(coords[0]), float(coords[1])
-        props = feat.get("properties", {})
-        address = ""  # Overland 不帶地址，留空
+        address = ""
 
         if last and _haversine(last[0], last[1], lat, lng) < GPS_MIN_DISTANCE_M:
             await _turso_touch(lat, lng)
