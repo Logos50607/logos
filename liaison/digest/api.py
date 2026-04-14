@@ -5,26 +5,23 @@ api.py - Digest REST API
 端點：
   GET  /identity/{identity_id}/participants  查詢 identity 在各 channel 的帳號
   GET  /identity/me/participants             查詢 LOGOS_IDENTITY_ID 的帳號
-  POST /gps                                  接收 Overland GPS 定位（寫入 Turso）
+  POST /gps                                  接收 Overland GPS 定位（寫入 Postgres）
 """
 
 import math
 import os
 import asyncpg
-import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DB_URL             = os.environ["DB_URL"]
 LOGOS_IDENTITY_ID  = os.environ.get("LOGOS_IDENTITY_ID", "")
-TURSO_URL          = os.environ.get("TURSO_URL", "")
-TURSO_TOKEN        = os.environ.get("TURSO_TOKEN", "")
 GPS_IDENTITY_ID    = os.environ.get("GPS_IDENTITY_ID", LOGOS_IDENTITY_ID)
 GPS_MIN_DISTANCE_M = float(os.environ.get("GPS_MIN_DISTANCE_M", "50"))
+GPS_TOKEN          = os.environ.get("GPS_TOKEN", "")
 
 
 # ── DB ────────────────────────────────────────────────────────────
@@ -82,7 +79,7 @@ async def get_participants(identity_id: str):
     return rows
 
 
-# ── GPS（Overland → Turso） ────────────────────────────────────────
+# ── GPS（Overland → Postgres） ────────────────────────────────────
 
 def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     R = 6_371_000
@@ -92,54 +89,30 @@ def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-async def _turso_last_location() -> tuple[float, float] | None:
-    """回傳 Turso 中最新一筆位置的 (lat, lng)，無資料回 None。"""
-    body = {"requests": [{"type": "execute", "stmt": {
-        "sql": "SELECT lat, lng FROM location WHERE identity_id = ? ORDER BY recorded_at DESC LIMIT 1",
-        "args": [{"type": "text", "value": GPS_IDENTITY_ID}],
-    }}]}
-    async with httpx.AsyncClient() as client:
-        r = await client.post(TURSO_URL, json=body,
-                              headers={"Authorization": f"Bearer {TURSO_TOKEN}"}, timeout=10)
-    rows = r.json()["results"][0]["response"]["result"]["rows"]
-    if not rows:
-        return None
-    return float(rows[0][0]["value"]), float(rows[0][1]["value"])
+async def _last_location() -> tuple[float, float] | None:
+    row = await pool().fetchrow(
+        "SELECT lat, lng FROM location WHERE identity_id = $1 ORDER BY recorded_at DESC LIMIT 1",
+        GPS_IDENTITY_ID,
+    )
+    return (row["lat"], row["lng"]) if row else None
 
 
-async def _turso_insert(lat: float, lng: float, address: str) -> None:
-    body = {"requests": [{"type": "execute", "stmt": {
-        "sql": "INSERT INTO location (identity_id, lat, lng, address, recorded_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
-        "args": [
-            {"type": "text",  "value": GPS_IDENTITY_ID},
-            {"type": "float", "value": lat},
-            {"type": "float", "value": lng},
-            {"type": "text",  "value": address},
-        ],
-    }}]}
-    async with httpx.AsyncClient() as client:
-        r = await client.post(TURSO_URL, json=body,
-                              headers={"Authorization": f"Bearer {TURSO_TOKEN}"}, timeout=10)
-    if r.json()["results"][0]["type"] != "ok":
-        raise RuntimeError(r.text)
+async def _insert_location(lat: float, lng: float) -> None:
+    await pool().execute(
+        "INSERT INTO location (identity_id, lat, lng) VALUES ($1, $2, $3)",
+        GPS_IDENTITY_ID, lat, lng,
+    )
 
 
-async def _turso_touch(lat: float, lng: float) -> None:
+async def _touch_location() -> None:
     """沒移動時更新最後一筆的 updated_at，記錄最後確認時間。"""
-    body = {"requests": [{"type": "execute", "stmt": {
-        "sql": "UPDATE location SET updated_at = datetime('now') WHERE id = (SELECT id FROM location WHERE identity_id = ? ORDER BY recorded_at DESC LIMIT 1)",
-        "args": [{"type": "text", "value": GPS_IDENTITY_ID}],
-    }}]}
-    async with httpx.AsyncClient() as client:
-        await client.post(TURSO_URL, json=body,
-                          headers={"Authorization": f"Bearer {TURSO_TOKEN}"}, timeout=10)
-
-
-GPS_TOKEN = os.environ.get("GPS_TOKEN", "")
-
-
-class OverlandPayload(BaseModel):
-    locations: list[dict]
+    await pool().execute(
+        """
+        UPDATE location SET updated_at = NOW()
+        WHERE id = (SELECT id FROM location WHERE identity_id = $1 ORDER BY recorded_at DESC LIMIT 1)
+        """,
+        GPS_IDENTITY_ID,
+    )
 
 
 @app.post("/gps")
@@ -154,25 +127,23 @@ async def receive_gps(request: Request, token: str = ""):
 
     if GPS_TOKEN and token != GPS_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if not TURSO_URL or not TURSO_TOKEN:
-        raise HTTPException(status_code=503, detail="TURSO_URL / TURSO_TOKEN 未設定")
 
-    payload = OverlandPayload(**_json.loads(body_bytes))
-    last = await _turso_last_location()
+    payload = _json.loads(body_bytes)
+    locations = payload.get("locations", [])
+    last = await _last_location()
     inserted = 0
 
-    for feat in payload.locations:
+    for feat in locations:
         coords = feat.get("geometry", {}).get("coordinates", [])
         if len(coords) < 2:
             continue
         lng, lat = float(coords[0]), float(coords[1])
-        address = ""
 
         if last and _haversine(last[0], last[1], lat, lng) < GPS_MIN_DISTANCE_M:
-            await _turso_touch(lat, lng)
+            await _touch_location()
             continue
 
-        await _turso_insert(lat, lng, address)
+        await _insert_location(lat, lng)
         last = (lat, lng)
         inserted += 1
 
