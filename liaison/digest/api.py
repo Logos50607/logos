@@ -135,12 +135,17 @@ async def _turso_touch(lat: float, lng: float) -> None:
                           headers={"Authorization": f"Bearer {TURSO_TOKEN}"}, timeout=10)
 
 
+GPS_TOKEN = os.environ.get("GPS_TOKEN", "")
+
+
 class OverlandPayload(BaseModel):
     locations: list[dict]
 
 
 @app.post("/gps")
-async def receive_gps(payload: OverlandPayload):
+async def receive_gps(payload: OverlandPayload, token: str = ""):
+    if GPS_TOKEN and token != GPS_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     if not TURSO_URL or not TURSO_TOKEN:
         raise HTTPException(status_code=503, detail="TURSO_URL / TURSO_TOKEN 未設定")
 
