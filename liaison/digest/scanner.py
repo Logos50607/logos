@@ -192,7 +192,7 @@ def _classify(prompt_template: str, sender_name: str, text: str,
     prompt = f"{prompt_template}\n\n{context}"
     try:
         result = subprocess.run(
-            [CLAUDE_BIN, "-p", prompt],
+            [CLAUDE_BIN, "-p", prompt, "--model", "haiku-4.5"],
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode != 0:
@@ -238,7 +238,7 @@ def _judge_topic(conn, topic_id: str, judge_prompt: str) -> dict | None:
     prompt = f"{judge_prompt}\n\n## Topic\ncategory: {category}\nsummary: {summary}\n\n## 訊息記錄\n{msgs_text}"
     try:
         result = subprocess.run(
-            [CLAUDE_BIN, "-p", prompt],
+            [CLAUDE_BIN, "-p", prompt, "--model", "haiku-4.5"],
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode != 0:
