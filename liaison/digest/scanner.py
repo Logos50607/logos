@@ -168,10 +168,28 @@ def _attach_identities_to_event(conn, event_id: str,
 
 # ── Claude 分類 ───────────────────────────────────────────────────
 
-def _classify(prompt_template: str, sender_name: str, text: str) -> tuple[str, str, str]:
+def _detect_group_and_mention(msg: dict) -> tuple[bool, bool]:
+    """檢測是否為群組訊息，以及是否提及 Logos。
+    回傳 (is_group, logos_mentioned)"""
+    payload = msg.get("payload", {})
+    to_type = payload.get("toType")
+    is_group = to_type == 2 or payload.get("to", "").startswith("C")
+
+    text = msg.get("text", "").lower()
+    logos_mentioned = any(name.lower() in text for name in ["logos", "羅格致", "陳佑竹", "@陳佑竹"])
+
+    return is_group, logos_mentioned
+
+
+def _classify(prompt_template: str, sender_name: str, text: str,
+              is_group: bool = False, group_name: str = "", logos_mentioned: bool = True) -> tuple[str, str, str]:
     """回傳 (category, priority, summary)。"""
     import subprocess
-    prompt = f"{prompt_template}\n\n發送者：{sender_name}\n訊息：{text}"
+    context = f"發送者：{sender_name}\n訊息：{text}"
+    if is_group:
+        context += f"\n（群組：{group_name}，Logos {'被提及' if logos_mentioned else '未被提及'}）"
+
+    prompt = f"{prompt_template}\n\n{context}"
     try:
         result = subprocess.run(
             [CLAUDE_BIN, "-p", prompt],
@@ -369,8 +387,15 @@ def scan_once():
                     msg["created_at"] / 1000, tz=timezone.utc
                 )
 
+                # 群組訊息預篩：未提及 Logos 則跳過
+                is_group, logos_mentioned = _detect_group_and_mention(msg)
+                if is_group and not logos_mentioned:
+                    skipped += 1
+                    continue
+
                 category, priority, summary = _classify(
-                    classify_prompt, sender, msg["text"]
+                    classify_prompt, sender, msg["text"],
+                    is_group=is_group, group_name=conv.get("display_name", ""), logos_mentioned=logos_mentioned
                 )
 
                 if category == "social" and priority == "low":
