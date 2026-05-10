@@ -1,0 +1,86 @@
+[
+  {
+    "port": 5433,
+    "service": "liaison-channel-db",
+    "description": "liaison-channel PostgreSQL",
+    "owner": "personal/liaison-channel",
+    "host": "localhost"
+  },
+  {
+    "port": 5434,
+    "service": "liaison-channel-db-replica",
+    "description": "liaison-channel PostgreSQL (replica / 備用)",
+    "owner": "personal/liaison-channel",
+    "host": "localhost"
+  },
+  {
+    "port": 6379,
+    "service": "redis",
+    "description": "Redis（共用）",
+    "owner": "infrastructure",
+    "host": "localhost"
+  },
+  {
+    "port": 7701,
+    "service": "unknown-7701",
+    "description": "待確認",
+    "owner": "unknown",
+    "host": "localhost"
+  },
+  {
+    "port": 8002,
+    "service": "unknown-8002",
+    "description": "待確認",
+    "owner": "unknown",
+    "host": "localhost"
+  },
+  {
+    "port": 8080,
+    "service": "unknown-8080",
+    "description": "待確認",
+    "owner": "unknown",
+    "host": "localhost"
+  },
+  {
+    "port": 8889,
+    "service": "unknown-8889",
+    "description": "待確認",
+    "owner": "unknown",
+    "host": "localhost"
+  },
+  {
+    "port": 9222,
+    "service": "chrome-cdp",
+    "description": "Chrome DevTools Protocol（Playwright / CDP 用）",
+    "owner": "personal/liaison-channel",
+    "host": "localhost"
+  },
+  {
+    "port": 9223,
+    "service": "chrome-cdp-2",
+    "description": "Chrome DevTools Protocol（備援）",
+    "owner": "personal/liaison-channel",
+    "host": "localhost"
+  },
+  {
+    "port": 15432,
+    "service": "mogroup-switchboard-db",
+    "description": "mogroup-switchboard PostgreSQL（metadata / audit / permissions）",
+    "owner": "urfit-tech/mogroup-switchboard",
+    "host": "localhost"
+  },
+  {
+    "port": 18000,
+    "service": "smart-home-web",
+    "description": "smart-home FastAPI（Arduino IR 控制 UI，僅 tailscale 連入）",
+    "owner": "personal/smart-home",
+    "host": "tailscale"
+  },
+  {
+    "port": 18765,
+    "service": "mogroup-switchboard-api",
+    "description": "mogroup-switchboard FastAPI server",
+    "owner": "urfit-tech/mogroup-switchboard",
+    "host": "localhost"
+  }
+]
