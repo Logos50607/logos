@@ -16,7 +16,13 @@ description: "Git 版控規範，定義了自動提交機制與訊息格式要�
   訊息應簡明地說明修改內容，並統一使用**台灣正體中文**。建議使用常見的前綴（例如
   `feat:`, `fix:`, `doc:`, `chore:`, `refactor:`）。
 
-## 2. Amend 規範
+## 2. 版控身分 (Identity)
+
+- **GitHub 帳號**：`Logos50607`
+- **Git author**：`Logos as a philosopher <yures611@gmail.com>`
+- 設定 git identity 或操作 GitHub（gh CLI、remote、PR）時，一律使用上述身分，不得杜撰或留空。
+
+## 3. Amend 規範
 
 - **略為修正直接 amend**：若變更屬於對上一次 commit 的微幅修正（如 typo、路徑修正、格式調整），應使用 `git commit --amend` 併入上一個 commit，而非產生新的 commit。
 - **獨立變更則新增 commit**：若變更涉及新功能、不同檔案群組或與上一次 commit 無直接關聯，則應建立新的 commit。
