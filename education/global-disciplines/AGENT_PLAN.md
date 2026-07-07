@@ -1,5 +1,16 @@
 # TODOLIST
 
+- [x] 2026-07-07 制度機制升級：trigger 分級載入、決策分層、hooks 強制執行
+      執行：discipline_metadata 新增 §3 載入策略；12 條規則改 model_decision、1 條改 glob、
+      新增 decision-authority 規則；sync_insert_text 依 trigger 分流並生成條件式規則索引；
+      Claude Code hooks（sudo 攔截、未 commit 提醒）進 dotfiles/claude/ 並註冊 settings.json；
+      救回孤兒規則 consume_external_projects、清除 GEMINI.md marker 外殘留
+      驗證：test_sync.sh 5 案例、hooks 測試 17 案例全數通過；GEMINI.md 1502 → 566 行；
+      hooks 待人工驗證（需新 session）
+      決策紀錄：reports/discipline-proposals/2026-07-07-mechanism-upgrade.md
+      session: /home/logos/.claude/projects/-home-logos-chat-with-agent/3d1b3686-a6e6-4f00-b69b-630d927e5251.jsonl
+- [ ] 2026-07-07 觀察分級載入成效：若某條 model_decision 規則常被漏讀，升回 always_on 或改為 hook
+      （session: /home/logos/.claude/projects/-home-logos-chat-with-agent/3d1b3686-a6e6-4f00-b69b-630d927e5251.jsonl）
 - [ ] 2026-03-20 整合 `/setup-project` 與 `/sync-disciplines`： - 移除專案中的
       `GEMINI.md`，將初始化資訊改寫入 `README.md`。 - 在 `/setup-project`
       的最後一步自動執行同步機制。
