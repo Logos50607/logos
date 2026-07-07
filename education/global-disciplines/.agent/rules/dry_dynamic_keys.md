@@ -1,6 +1,6 @@
 ---
 name: dry_dynamic_keys
-trigger: always_on
+trigger: model_decision
 description: "禁止對多維度相同操作硬編碼每個 key，應以動態迭代統一處理，確保 DRY 與單一來源原則。"
 ---
 

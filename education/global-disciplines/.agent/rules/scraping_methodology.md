@@ -1,6 +1,6 @@
 ---
 name: scraping_methodology
-trigger: always_on
+trigger: model_decision
 description: "爬蟲開發方法論：監聽技巧、認證機制、reCAPTCHA 限制，以及何時保留瀏覽器自動化。"
 ---
 

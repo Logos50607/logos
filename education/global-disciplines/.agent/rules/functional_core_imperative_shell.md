@@ -1,6 +1,6 @@
 ---
 name: functional_core_imperative_shell
-trigger: always_on
+trigger: model_decision
 description: "純計算與副作用分離：pure function 不做 I/O，orchestrator 不做業務邏輯。又稱 Functional Core / Imperative Shell。"
 ---
 

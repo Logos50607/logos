@@ -1,6 +1,6 @@
 ---
 name: env-driven-config
-trigger: always_on
+trigger: model_decision
 description: "非 secret 的外部設定參照模式：路徑、端點、feature flag 等一律以 .env 宣告，不得 hardcode。Secret 值另見 secrets-management 規範。"
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: modular_decomposition
-trigger: always_on
+trigger: model_decision
 description: "專案模組拆解原則：何時抽離、抽到哪、personal 如何援引、如何交付。"
 ---
 

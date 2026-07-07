@@ -1,6 +1,6 @@
 ---
 name: pipeline_background_steps
-trigger: always_on
+trigger: model_decision
 description: "多步驟 pipeline 各步驟必須獨立背景執行，各有 PID 與 log 檔，可個別終止。"
 ---
 

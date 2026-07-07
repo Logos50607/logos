@@ -31,7 +31,14 @@ globs: "GEMINI.md .agent/rules/**/*.md .agent/skills/**/*.md .agent/workflows/**
 - **使用者層級事實不在此限**：本體系服務單一使用者，使用者本人的事實（身分、環境、工具、偏好）**可以**寫入 global disciplines，但仍須按關注點分離歸入對應規則（如身分入 git_usage、環境入 workstation-environment），不得聚合成單一 profile 大雜燴檔。
 - 範例若有必要，應使用抽象的佔位名稱（如 `keyA`、`featureX`），而非實際業務欄位。
 
-## 3. 範例
+## 3. Trigger 載入策略 (Loading Policy)
+
+- **`always_on`**：全文注入每個 session 的 context（sync 時寫入 GEMINI.md / CLAUDE.md）。保留給**跨任務皆適用的行為基線**；新增 always_on 規則前必須先問：「每個 session 都需要這條嗎？」
+- **`model_decision` / `glob` / `manual`**：不注入全文，只出現在注入的**條件式規則索引**中（name、觸發條件、description、檔案路徑）。agent 判斷當前任務相關時，自行讀取全文再行動。
+- 因此非 always_on 規則的 `description` 必須寫明**何時必讀**（例如「起任何服務前」「撰寫爬蟲時」）。
+- **機制優先於條文**：規則的效力來自機制（注入、hook、測試、CI），不是條文數量。能用 hook 或腳本強制的行為，優先做成機制，條文只記載原則與理由。
+
+## 4. 範例
 
 ```yaml
 ---

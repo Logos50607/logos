@@ -1,6 +1,7 @@
 ---
 name: agent_plan_update_triggers
-trigger: always_on
+trigger: glob
+globs: "AGENT_PLAN.md"
 description: "規範 AGENT_PLAN.md 何時必須更新，確保設計決策與完成進度即時反映。"
 ---
 

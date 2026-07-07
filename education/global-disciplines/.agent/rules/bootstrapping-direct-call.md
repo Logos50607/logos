@@ -1,6 +1,6 @@
 ---
 name: bootstrapping-direct-call
-trigger: always_on
+trigger: model_decision
 description: "說明 call-agent 尚未就位時的 bootstrapping 例外：人類暫代 call-agent 角色，負責注入 --allowedTools 給監察組。"
 ---
 

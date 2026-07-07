@@ -1,6 +1,6 @@
 ---
 name: skill-vs-tool
-trigger: always_on
+trigger: model_decision
 description: "區分 skill 與 tool 的判斷準則：何時留在 .agent/skills/，何時應獨立發布為工具。"
 ---
 
