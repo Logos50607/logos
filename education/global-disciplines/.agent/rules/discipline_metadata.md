@@ -28,6 +28,7 @@ globs: "GEMINI.md .agent/rules/**/*.md .agent/skills/**/*.md .agent/workflows/**
 
 - **SSOT**：Global disciplines 的唯一來源為 `~/.gemini/.agent/`，修改必須在此進行，再透過 sync 同步至各 agent。
 - **不得與任何特定專案耦合**：global disciplines 不得包含專案特定的欄位名稱、路徑、程式碼片段或業務邏輯。
+- **使用者層級事實不在此限**：本體系服務單一使用者，使用者本人的事實（身分、環境、工具、偏好）**可以**寫入 global disciplines，但仍須按關注點分離歸入對應規則（如身分入 git_usage、環境入 workstation-environment），不得聚合成單一 profile 大雜燴檔。
 - 範例若有必要，應使用抽象的佔位名稱（如 `keyA`、`featureX`），而非實際業務欄位。
 
 ## 3. 範例
