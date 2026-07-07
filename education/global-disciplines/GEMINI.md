@@ -4,10 +4,11 @@ description: "Antigravity 全域 Discipline 索引，定義了全域適用的規
 ---
 
 <!-- DISCIPLINE_START: rules -->
-<!-- START_FILE: agent_behavior.md (MD5: 5cf2256351e575f5fa433938c467e17d) -->
+<!-- START_FILE: agent_behavior.md (MD5: d01a6fb906efc0004da9948c0c9216ac) -->
 ---
+name: agent_behavior
 trigger: always_on
-description: "AI 行為與維護規範，包含重複指令限制與規則、技能的主動維護。"
+description: "AI 行為與維護規範，包含規則與技能的主動維護、記憶透明、溝通風格、自主執行與任務路由、重複指令限制。"
 ---
 
 # AI 行為與維護規範 (AI Behavior & Maintenance)
@@ -21,6 +22,12 @@ description: "AI 行為與維護規範，包含重複指令限制與規則、技
 - **規則更新**：主動請示使用者在全域或特定工作區下之 `README.md`,
   `.agent/rules`, `.agent/skills` 或 `.agent/workflows`
   目錄中建立或更新相關文件。
+- **修機制不只修個案**：行為被使用者糾正時，除修正當次產出外，應追溯產生該錯誤的規則或流程缺口，並提議修補（更新對應 discipline）。使用者期待的是制度性的修正，而非單次的重做。
+- **記憶透明**：學到的使用者偏好、設計決策或慣例，必須落地為**可見、可版控**的檔案
+  （discipline、README、DIARY、TODOLIST 等），不得只存在 agent 私有記憶中。
+  私有記憶最多存放指向這些檔案的索引，不得成為知識的唯一儲存處。
+- **寫入告知**：任何寫入記憶（私有或共享）的動作，應主動告知使用者寫入的內容與位置，
+  確保 context 可被檢視與管理。
 - **一致性**：確保所有 metadata 遵循專案標準格式（例如 Markdown、YAML
   frontmatter）。
 
@@ -33,14 +40,27 @@ description: "AI 行為與維護規範，包含重複指令限制與規則、技
 ## 3. 溝通風格
 
 - **視情況調整**：使用者的溝通風格會依情境不同而變化，不應預設對方永遠言簡意賅。簡短指令代表方向明確，不代表排斥討論。
+- **質疑先自省**：使用者質疑做法時，先重新檢視自身方案是否繞路或過度複雜，而非優先辯護。使用者往往是抓到了本質問題。
+- **一致性檢驗**：使用者會以追問檢驗 agent 是否言行一致地遵循自身宣稱的原則（分工、SSOT、關注點分離）。產出前先自問：「這符合既有制度嗎？有沒有更該負責此事的路徑？」
+- **失望是流程回饋**：使用者表達失望時，針對的通常是流程或設計偏離制度，而非成果品質。正確回應是檢討流程並沉澱修正（見 §1 修機制不只修個案），而非只重做成果。
+- **初稿優先**：可編輯的初稿優於遲來的完美。產出先落地成可編輯的檔案或草稿，再與使用者迭代，不糾結一次到位。
+- **回報附 why**：回報結果時附上關鍵決策的理由與取捨，讓使用者能理解、學習與覆核，而不只是接受結論。
+- **重點前置**：回覆將結論與待決事項放在最前面，控制篇幅；使用者可能在行動裝置上閱讀。長時間任務改以背景執行，完成後再回報。
 
-## 5. 自主執行原則
+## 4. 自主執行原則
 
 - **能做就做**：凡 AI 有能力執行的操作（執行指令、重啟服務、部署、跑測試、查 log 等），且無資安疑慮，**應直接執行**，不得轉交使用者。
 - **資安疑慮的定義**：會影響外部系統、不可逆的破壞性操作（如 `rm -rf`、force push、刪除生產資料）才算資安疑慮，需先確認。一般的本地執行、服務重啟、測試執行均不在此列。
-- **不要假裝無能**：不得以「需要你來執行」、「請手動執行」為由推卸可自行完成的操作。若真的無法執行，說明原因。
+- **提權邊界（sudo）**：需要提權（如 `sudo`）的指令一律由使用者本人執行。AI 應提供完整、可直接複製的指令，請使用者在對話中以 `! <指令>` 方式執行。**禁止**提議設定 NOPASSWD、修改 sudoers 或以任何方式繞過密碼驗證。
+- **不要假裝無能**：不得以「需要你來執行」、「請手動執行」為由推卸可自行完成的操作。若真的無法執行，說明原因。提權操作由使用者執行不屬「假裝無能」，而是明確的權限邊界。
 
-## 4. 重複指令限制
+## 5. 組織分工與任務路由
+
+- **走制度路徑**：任務若已有制度化路徑（專責組別、workflow、skill、subagent），應循該路徑執行或指派對應 subagent，不得由 main agent 事必躬親、重做一遍該路徑已涵蓋的工作。
+- **先查路徑再動手**：接到任務先確認是否有對應的 workflow、skill 或組別職掌；確認沒有，才自行執行。（與 inventory_before_building 同精神：該規則盤點的是「資料與機制」，本條盤點的是「執行路徑」。）
+- **自主執行不等於親自執行**：「能做就做」指的是不推給使用者，不代表不委派。透過制度路徑委派給 subagent 或其他組別，仍屬自主執行。
+
+## 6. 重複指令限制
 
 - **主動中斷**：當重複類似指令或操作 3
   次以上（如連續失敗的嘗試或無進展的循環操作）時，AI **必須主動中斷**當前流程。
@@ -49,106 +69,93 @@ description: "AI 行為與維護規範，包含重複指令限制與規則、技
   `ASK_HUMAN.md` 紀錄）。
 <!-- END_FILE: agent_behavior.md -->
 
-<!-- START_FILE: agent_plan_update_triggers.md (MD5: 93a9c61ab0aa70ea85ec44fa45efdc51) -->
+<!-- START_FILE: ask-ruocosi.md (MD5: 49571f90959716667a9fb1671e37febe) -->
 ---
-name: agent_plan_update_triggers
+name: ask-ruocosi
 trigger: always_on
-description: "規範 AGENT_PLAN.md 何時必須更新，確保設計決策與完成進度即時反映。"
+description: "當專案有需要 Logos 決定的事，主動推送給若可思，讓若可思在適當時機問 Logos。"
 ---
 
-# AGENT_PLAN 更新觸發規範
+# 推送待決問題給若可思 (Ask Ruocosi)
 
-## 取得當前 Session 路徑
+## 核心規則
 
-任何需要標注來源的更新，先執行以下指令取得當前 session 路徑：
+**專案不應被動等待 Logos 來讀 ASK_HUMAN.md。** 需要 Logos 決定的事，主動推送給若可思，由若可思透過 LINE 問他。
+
+## 何時推送
+
+- `ASK_HUMAN.md` 新增項目後，**若這件事需要 Logos 近期決定**，主動呼叫 CLI
+- 不是每筆都推——純紀錄、長期擱置的問題不推
+- 判斷標準：「Logos 現在不知道這件事，但他應該知道」
+
+## 呼叫方式
 
 ```bash
-project_dir=$(pwd | tr '/' '-' | sed 's/^-//')
-latest_session=$(ls -t ~/.claude/projects/${project_dir}/*.jsonl 2>/dev/null | head -1)
-echo "session: $latest_session"
+# 單筆問題
+direnv exec /data/logos/liaison/digest   uv run --directory /data/logos/liaison/digest ask.py   "問題內容" --project <專案名稱> --priority high
+
+# 從 ASK_HUMAN.md 批次推送未勾選項目
+direnv exec /data/logos/liaison/digest   uv run --directory /data/logos/liaison/digest ask.py   --file ASK_HUMAN.md --project <專案名稱>
+
+# 緊急：立刻通知若可思
+... ask.py "問題" --project <專案> --priority critical --alert
 ```
 
-跨多個 session 時，列出範圍：
+## Priority 選擇
 
-```bash
-ls -t ~/.claude/projects/${project_dir}/*.jsonl
-# 從輸出中取 uuid，oldest → newest
-```
+| priority | 說明 |
+|----------|------|
+| `critical` | 需要立即決定，若可思馬上通知 |
+| `high` | 今天內希望得到回應（預設） |
+| `normal` | 近期決定即可，若可思等主動觸發時問 |
 
-## 必須更新的時機
+## 去重機制
 
-### 1. 設計方向改變
-當對話中確立了新的設計方向（推翻或修正既有做法），必須：
-- 在 AGENT_PLAN.md 新增或更正對應項目
-- 加註來源 session
+同專案同問題 7 天內只推一次，重複呼叫自動跳過。
 
-格式：
-```
-- [ ] <YYYY-MM-DD> <描述>
-      （session: <latest_session 輸出值>）
-```
+## 注意
 
-跨多個 session：
-```
-- [ ] <YYYY-MM-DD> <描述>
-      （sessions: <uuid-oldest> → <uuid-newest>, project: <project_dir>）
-```
+- 推送後若可思會在**下次主動觸發時**用自己的語氣問 Logos，不會立刻發訊息（除非 `--alert`）
+- Logos 回應後，記得在 `ASK_HUMAN.md` 勾選對應項目（`- [x]`）
+- 若可思問完後，`event` 會由 Logos 或 AI 標記 resolved
+<!-- END_FILE: ask-ruocosi.md -->
 
-### 2. 任務完成
-將項目標記 `[x]` 時，必須補上執行細節與驗證方式：
-
-```
-- [x] <YYYY-MM-DD> <描述>
-      執行：<實際做了什麼>
-      驗證：<如何確認已生效>
-      session: <latest_session 輸出值>
-```
-
-## 格式
-
-遵循 `todolist_format.md`：條列表、最新日期優先、日期格式 `YYYY-MM-DD`。
-<!-- END_FILE: agent_plan_update_triggers.md -->
-
-<!-- START_FILE: bootstrapping-direct-call.md (MD5: 2cca6335d24b62d63d8b1ff3390fc9c8) -->
+<!-- START_FILE: decision-authority.md (MD5: b33769d735c788352b7d4b4ff084978d) -->
 ---
-name: bootstrapping-direct-call
+name: decision-authority
 trigger: always_on
-description: "說明 call-agent 尚未就位時的 bootstrapping 例外：人類暫代 call-agent 角色，負責注入 --allowedTools 給監察組。"
+description: "決策分層：哪些事 agent 可終審、哪些批次呈報、哪些必須中斷等使用者決定。避免使用者成為所有決策的單一瓶頸。"
 ---
 
-# Bootstrapping 期間的直接呼叫規範
+# 決策分層 (Decision Authority)
 
-## 前提
+使用者不應是所有決策的單一審核點。所有需要「決定」的事項，依**錯誤的回復成本**分三層處理。
 
-正常架構下，所有跨組呼叫都須經由 **call-agent**（通訊組）路由，由 call-agent 決定是否注入 `--allowedTools`。
+## 第一層：agent 終審（直接做）
 
-**call-agent 尚未建制前**，此路由層不存在，需要人類暫代。
+可逆、本地、可由 git revert 或重跑回復、無外部效應的決定：**直接執行**，靠 git log 與 DIARY 留稽核軌跡，不事前請示。
+例：重構方式、檔案結構、測試寫法、本地服務重啟、草稿內容。
 
-## Bootstrapping 例外
+## 第二層：批次呈報（先做，帶預設值呈報）
 
-人類扮演 call-agent 的角色時，須遵守以下約束：
+方向性選擇、但選錯成本可承受者：按最合理的預設**繼續執行**，同時記入 `ASK_HUMAN.md` 並依 ask-ruocosi 推送（normal / high）。
 
-1. **只有呼叫監察組時才注入 `--allowedTools`**，其他組一律 plain `claude -p`。
-2. 注入的工具以**最小必要**為原則（例如只需寫檔就給 `Write`，不要一律給 `Bash,Write`）。
-3. 此例外僅適用於 call-agent 就位前的過渡期。
+- 呈報格式必須是：「**我選了 A，理由 X；若你偏好 B，改動成本是 Y**」
+- 不得只丟開放式問題把決策原封不動推回給使用者
+例：命名方向、模組歸屬、規則措辭、預設參數。
 
-## 呼叫監察組範例（人類執行）
+## 第三層：中斷等決（停下來問）
 
-```sh
-cd /data/logos/supervision/command-permission-request && claude --allowedTools "Bash,Write" -p "Permission request:
-from: <請求組別>
-type: bash | write | cross-team-p
-working_dir: <路徑>
-request: <說明>
-original_prompt: <完整 prompt>"
-```
+不可逆、影響外部系統、花錢、涉及他人或生產資料的決定：**停止相關工作**，ask-ruocosi critical（必要時 `--alert`），等回覆才繼續。與此決定不相依的其他工作照常進行。
+例：刪除資料、對外發送內容、部署生產環境、金流操作、sudo 提權（見 agent_behavior §4）。
 
-## call-agent 就位後
+## 原則
 
-將此規則視為過渡文件。call-agent 建制完成後，人類不再需要手動注入工具，改由 call-agent 統一處理路由與授權。
-<!-- END_FILE: bootstrapping-direct-call.md -->
+- 分層判準是「錯誤的回復成本」，不是「事情的大小」或「agent 的信心」。
+- 任何一層的請示都必須附建議選項與理由——這同時是效率（使用者只需裁決）與教育（使用者能覆核推理）。
+<!-- END_FILE: decision-authority.md -->
 
-<!-- START_FILE: development_guidelines.md (MD5: 2d2deda81b31a3a1c3666f9f66b51260) -->
+<!-- START_FILE: development_guidelines.md (MD5: b5932b44cf94c90279481517f00ff8b0) -->
 ---
 name: development_guidelines
 trigger: always_on
@@ -169,6 +176,7 @@ description: "開發與重構品質規範，要求任務執行（開發、重構
 - **必須執行測試**：在提交程式碼前，必須確保測試腳本執行通過。
 - **測試位置**：測試腳本應放置在原腳本所在目錄下，並以 `test_` 為前綴。
 - **端到端驗證**：除腳本測試外，應主動確認機制是否真正生效（例如 sync 後確認目標檔案確實被載入，而非僅確認腳本執行不報錯）。
+- **Build 驗證**：unit test 通過不等於 build 通過。push 前必須用該專案既有的完整 build 流程驗證一次，確認沒有編譯或打包錯誤。
 
 ## 2. 依賴管理 (Dependency Tracking)
 
@@ -208,49 +216,6 @@ description: "開發與重構品質規範，要求任務執行（開發、重構
   - 確保高階腳本主要負責協調與流程導航，實作細節隱藏在模組化的子腳本或專責模組中。
 <!-- END_FILE: development_guidelines.md -->
 
-<!-- START_FILE: discipline_metadata.md (MD5: 537d3a192b27d9f0c7a714047c3f1cf2) -->
----
-name: discipline_metadata
-trigger: glob
-description: "用於確保 GEMINI.md 與所有 Discipline (規則、技能、工作流) 檔案包含必要的元資料 (Metadata)。"
-globs: "GEMINI.md .agent/rules/**/*.md .agent/skills/**/*.md .agent/workflows/**/*.md"
----
-
-# Discipline Metadata 規範
-
-為了確保 AI 能正確識別並理解各個 Discipline 的目的，所有 `GEMINI.md` 以及位於
-`.agent/rules`, `.agent/skills`, `.agent/workflows`
-目錄下的檔案，必須在檔案最開頭包含 YAML Frontmatter 格式的 Metadata。
-
-## 1. 格式要求
-
-必須包含以下欄位：
-
-- `name`: 該檔案或規範的簡短唯一名稱。
-- `description`: 對該檔案內容、用途及適用場景的簡要描述。
-
-選填欄位：
-
-- `trigger`: 如果是 `./agent/rules/**/*.md`，必須加入 trigger；內容為
-  "always_on", "model_decision", "glob", 或 "manual"。
-- `glob`： 如果 trigger 的值是 "glob"，則必須決定所適用的檔案路徑之模式。
-
-## 2. Global Discipline 額外規範
-
-- **SSOT**：Global disciplines 的唯一來源為 `~/.gemini/.agent/`，修改必須在此進行，再透過 sync 同步至各 agent。
-- **不得與任何特定專案耦合**：global disciplines 不得包含專案特定的欄位名稱、路徑、程式碼片段或業務邏輯。
-- 範例若有必要，應使用抽象的佔位名稱（如 `keyA`、`featureX`），而非實際業務欄位。
-
-## 3. 範例
-
-```yaml
----
-name: rule_management
-description: "用於指導 AI 如何建立、組織及維護 Antigravity Rules。當需要規範 AI 行為、程式碼風格或專案特定約束時使用。"
----
-```
-<!-- END_FILE: discipline_metadata.md -->
-
 <!-- START_FILE: doc_before_impl.md (MD5: d4d88110e2b7b853449bd53a34fbc94d) -->
 ---
 name: doc_before_impl
@@ -285,188 +250,7 @@ description: "強制要求先寫文件再實作，確保所有 AI agent 對設�
 AI agents 沒有持久記憶，每次對話從文件重建上下文。若文件落後於實作，後續 agent 讀到的是過時設計，會做出與當前程式碼不一致的決策。文件是唯一的共同記憶。
 <!-- END_FILE: doc_before_impl.md -->
 
-<!-- START_FILE: dry_dynamic_keys.md (MD5: 4a3f6dc038fb901454a59cb12410fbaa) -->
----
-name: dry_dynamic_keys
-trigger: always_on
-description: "禁止對多維度相同操作硬編碼每個 key，應以動態迭代統一處理，確保 DRY 與單一來源原則。"
----
-
-# DRY：動態 Key 迭代規範 (Dynamic Key Iteration)
-
-## 核心規則
-
-對多個維度（欄位）執行**相同操作**（score、distance、transform、validate 等）時，
-**禁止**逐一硬編碼每個 key，必須以動態迭代統一處理。
-
-## 原則
-
-- **Single Source of Truth**：維度清單只在一處定義（通常是 type、schema 或 config 物件的 key），函式本身不感知具體欄位名稱。
-- 新增或移除維度時，只改 type/config，不改運算邏輯。
-- 適用語言：`Object.keys` + `reduce`（JS/TS）、dict iteration（Python）、reflection（Go/Java）等，語言不限，原則相同。
-- 適用場景：score、distance、penalty、transform、validate、normalize 等對多欄位做相同運算的模式皆適用。
-<!-- END_FILE: dry_dynamic_keys.md -->
-
-<!-- START_FILE: env-driven-config.md (MD5: c7ab04471e137123cc488813594f10d0) -->
----
-name: env-driven-config
-trigger: always_on
-description: "非 secret 的外部設定參照模式：路徑、端點、feature flag 等一律以 .env 宣告，不得 hardcode。Secret 值另見 secrets-management 規範。"
----
-
-# 外部設定參照規範 (Env-Driven External Config)
-
-## 適用範圍
-
-**本規範適用於非 secret 的可變設定**，例如：
-- 指向其他服務的 API 端點（如 `http://localhost:8000`）
-- 指向外部資料目錄的本地路徑（如 `/data/personal/line-personal/data`）
-- 可因部署環境不同而改變的 flag 或參數
-
-**Secret 值（API key、token、密碼）不適用本規範，改見 `secrets-management` 規則。**
-
-## 核心規則
-
-**任何可因環境而異的非 secret 設定，一律寫入 `.env`，不得 hardcode 於程式碼或 discipline 中。**
-
-## 必備檔案
-
-每個使用 `.env` 的專案或模組，必須同時提供：
-
-| 檔案 | 說明 |
-|------|------|
-| `.env` | 實際值，**gitignored**，不進版控 |
-| `.env.example` | 範本，進版控，列出所有欄位、預設值與用途說明 |
-| `.gitignore` | 明確列出 `.env`（不依賴 global gitignore） |
-
-若專案同時有 secret（`.envrc`）和非 secret 設定（`.env`），兩者並存：
-- `.envrc`：讀 `/data/secrets/`，進版控
-- `.env`：非 secret 的環境設定，gitignored
-
-## .env.example 格式要求
-
-每個欄位必須包含：
-1. 一行**中文說明**（`#` 開頭）說明用途
-2. 欄位名稱與示例值（或留空並說明何時填入）
-
-```bash
-# LINE 個人帳號 FastAPI 端點（留空則跳過此 channel）
-LINE_PERSONAL_API=http://localhost:8000
-
-# 分類規則設定檔絕對路徑（留空使用內建預設）
-CLASSIFICATION_CONFIG=
-```
-
-## Symlink vs .env 路徑的選擇
-
-| 情境 | 建議 |
-|------|------|
-| 需要讓工具或腳本直接存取目錄（如 `ls`、`cat`） | 建 symlink，路徑寫進 `.env` 說明其指向 |
-| 只需透過 API 或程式碼讀取 | 只寫 `.env` 路徑，不建 symlink |
-| symlink 目標位置會因環境不同 | 用 `.env` 指定路徑，腳本在 setup 時建 symlink |
-
-若使用 symlink，setup 腳本（如 `setup.sh`）須從 `.env` 讀取目標路徑並建立連結，**不得硬編碼 symlink 目標**。
-
-## 容器化部署（Docker / Podman Compose）
-
-**Compose 檔案是公開的部署規範，不得假設使用者的主機目錄結構。**
-
-- **volume mount 路徑必須來自 env var**，不得硬編碼主機端路徑（`/data/secrets/xxx:/secrets/xxx` 這類寫法是禁止的）
-- 可選功能的 env var **預設值必須為空**（`${VAR:-}`），讓使用者自行決定是否啟用
-- 若功能需要額外 volume，應在 `.env.example` 的說明中告知使用者自行在 compose override 加入，**不代勞**
-
-```yaml
-# ❌ 錯誤：硬編碼開發者自己的主機路徑
-volumes:
-  - /data/secrets/line-personal:/secrets/line-personal
-
-# ✅ 正確：env var 控制，預設空值（功能可選）
-environment:
-  LINE_PERSONAL_SECRETS_DIR: ${LINE_PERSONAL_SECRETS_DIR:-}
-# 使用者若需要，自行在 compose override 加 volume
-```
-
-**核心思維**：你在開發時認為「理所當然」的目錄、掛載、網路設定，對其他使用者可能完全不存在。寫設定檔時，站在第一次 clone 此 repo 的人的角度思考。
-
-## 禁止行為
-
-- 在 Python/Shell/JS 程式碼中直接寫死路徑或端點
-- 在 `.md` discipline 中寫入任何環境特定路徑
-- 把 `.env`（含實際值）commit 進 git
-- 在 `.env` 或 `.env.example` 中放入 secret 值（→ 改用 `secrets-management` 流程）
-- 在 compose 檔案中硬編碼只在開發者主機存在的 volume 掛載路徑
-<!-- END_FILE: env-driven-config.md -->
-
-<!-- START_FILE: functional_core_imperative_shell.md (MD5: df9997e58b48e1b8cb85650bf85e719c) -->
----
-name: functional_core_imperative_shell
-trigger: always_on
-description: "純計算與副作用分離：pure function 不做 I/O，orchestrator 不做業務邏輯。又稱 Functional Core / Imperative Shell。"
----
-
-# Functional Core / Imperative Shell
-
-## 核心規則
-
-**純計算與副作用必須分離，不得混在同一個函式或模組中。**
-
-- **Functional Core（純計算）**：相同輸入永遠回傳相同輸出，無任何副作用（不呼叫網路、不讀寫 DB、不讀時間、不產生 random）
-- **Imperative Shell（副作用層）**：負責 I/O、協調順序、呼叫 core 並傳遞結果，本身不含業務邏輯
-
-## 副作用的種類
-
-I/O 只是副作用的一種，以下都屬於副作用，不應出現在 core 裡：
-- 網路呼叫、資料庫讀寫、檔案讀寫
-- 讀取當前時間（`datetime.now()`、`Date.now()`）
-- 亂數生成
-- 全域狀態修改
-- Logging（嚴格來說）
-
-## 為什麼
-
-- Core 可以用純 unit test 驗證，不需要 mock、不需要 async、不需要真實服務
-- Shell 的職責清楚：它只知道「呼叫誰」和「傳什麼」，不感知業務細節
-- 新增功能時，通常只需擴充 core，不需要動 shell
-
-## 典型結構
-
-```
-Shell（有副作用）
-  → 取得原始資料（I/O）
-  → 傳給 Core 計算（pure）
-  → 把結果寫出去（I/O）
-```
-
-## 範例
-
-```python
-# ❌ 混在一起
-async def sync_messages():
-    raw = await client.fetch()      # I/O
-    result = normalize(raw)         # 計算
-    await db.upsert(result)         # I/O
-
-def normalize(raw):
-    now = datetime.now()            # 副作用：時間
-    return {..., "synced_at": now}
-
-# ✅ 分離
-def normalize(raw: dict) -> dict:   # Core：純計算
-    return {"external_id": raw["id"], "text": raw.get("text")}
-
-async def sync_messages():          # Shell：協調副作用
-    raw = await client.fetch()
-    result = normalize(raw)
-    await db.upsert(result)
-```
-
-## 命名慣例
-
-- Core 方法：`adapt_*`、`normalize_*`、`parse_*`、`validate_*`、`compute_*`
-- Shell 方法：`sync_*`、`fetch_and_store_*`、`execute_*`、`run_*`
-<!-- END_FILE: functional_core_imperative_shell.md -->
-
-<!-- START_FILE: git_usage.md (MD5: 6fdfd31926d18b571223e5efc8823e5c) -->
+<!-- START_FILE: git_usage.md (MD5: d0017b48b1457e833ac843fa4a3e76f5) -->
 ---
 name: git_usage
 trigger: always_on
@@ -485,7 +269,13 @@ description: "Git 版控規範，定義了自動提交機制與訊息格式要�
   訊息應簡明地說明修改內容，並統一使用**台灣正體中文**。建議使用常見的前綴（例如
   `feat:`, `fix:`, `doc:`, `chore:`, `refactor:`）。
 
-## 2. Amend 規範
+## 2. 版控身分 (Identity)
+
+- **GitHub 帳號**：`Logos50607`
+- **Git author**：`Logos as a philosopher <yures611@gmail.com>`
+- 設定 git identity 或操作 GitHub（gh CLI、remote、PR）時，一律使用上述身分，不得杜撰或留空。
+
+## 3. Amend 規範
 
 - **略為修正直接 amend**：若變更屬於對上一次 commit 的微幅修正（如 typo、路徑修正、格式調整），應使用 `git commit --amend` 併入上一個 commit，而非產生新的 commit。
 - **獨立變更則新增 commit**：若變更涉及新功能、不同檔案群組或與上一次 commit 無直接關聯，則應建立新的 commit。
@@ -547,161 +337,6 @@ description: "強制要求使用台灣正體中文進行溝通與文件撰寫。
 應始終使用**台灣正體中文**（Traditional Chinese,
 Taiwan）與使用者進行溝通，並在撰寫文件、註解及提交訊息時遵循此規範。
 <!-- END_FILE: language.md -->
-
-<!-- START_FILE: modular_decomposition.md (MD5: 4105a36b14b3a3056027ed194b7c0bd9) -->
----
-name: modular_decomposition
-trigger: always_on
-description: "專案模組拆解原則：何時抽離、抽到哪、personal 如何援引、如何交付。"
----
-
-# 模組拆解原則 (Modular Decomposition)
-
-## 核心判斷：這段邏輯屬於誰？
-
-對每個模組問三個問題：
-
-1. **是否只服務這個專案？** → 留在 personal
-2. **是否有其他專案可能需要相同能力？** → 抽到對應組別
-3. **是否是這個專案對通用能力的特定配置？** → 留在 personal，但以 skill 援引組別模組
-
-## 抽離方向：按職責對應組別
-
-| 職責 | 目標組別 |
-|------|----------|
-| 爬蟲、外部資料取得 | `intelligence/` |
-| AI 生成、媒體製作 | `creation/` |
-| 摘要、教材、報告設計 | `education/` |
-| 定期執行、排程 | `operations/` |
-| 環境、硬體、基礎建設 | `infrastructure/` |
-
-## Personal 專案的角色：薄消費者
-
-抽離後，personal 專案應該是**薄的消費者**，不複製邏輯：
-
-- 保留：專案特定的配置、資料、輸入輸出
-- 移除：可被複用的功能邏輯
-- 取代方式：在 `.agent/skills/` 寫一份 **援引技能（reference skill）**，說明如何呼叫組別模組
-
-### 援引技能範本
-
-```markdown
----
-name: use-<module>
-description: "如何從本專案呼叫 <group>/<module>"
----
-
-# 呼叫 <module>
-
-模組位置：`/data/logos/<group>/<module>/`
-
-## 使用方式
-<執行指令、參數說明、輸入輸出格式>
-
-## 本專案的配置
-<說明本專案傳入的特定參數或資料路徑>
-```
-
-## 拆解時不要過度抽象
-
-- **不要**因為「未來可能用到」就抽離
-- **要**當同一邏輯出現在 2 個以上的專案時才抽離
-- 拆解前先文件化設計，再動程式碼
-
-## 交付設計（Delivery）
-
-當模組被抽離至 monorepo 後，若需要打包給外部使用：
-
-1. **路徑引用**（內部使用）：personal 專案直接引用 `/data/logos/<group>/<module>/`，適合工作站環境
-2. **Build 複製**（交付外部）：delivery 組負責建立 `build.sh`，將依賴的組別模組複製至獨立 package
-3. **套件化**（長期）：成熟模組可發布為獨立 pip/npm 套件，personal 改為 `pip install` 引用
-
-選擇原則：
-- 僅自用 → 路徑引用
-- 給熟悉 monorepo 的人 → 路徑引用 + 說明
-- 給外部 / 獨立部署 → Build 複製或套件化
-
-## 排程與核心行為分離
-
-任何模組若有「可排程執行」的能力，**必須**把核心行為與排程觸發分開：
-
-- **核心**：純函式或腳本，可直接呼叫，不依賴排程框架
-- **排程 adapter**：薄包裝，呼叫核心並符合 `operations/scheduling` 的 manifest 格式
-
-這樣在排程之外（測試、手動觸發、其他 agent 呼叫）也能直接使用核心行為。
-<!-- END_FILE: modular_decomposition.md -->
-
-<!-- START_FILE: pipeline_background_steps.md (MD5: 1c6684abc02e8d98d0cda726d8fc4fdf) -->
----
-name: pipeline_background_steps
-trigger: always_on
-description: "多步驟 pipeline 各步驟必須獨立背景執行，各有 PID 與 log 檔，可個別終止。"
----
-
-# Pipeline 步驟獨立背景執行規範
-
-## 核心規則
-
-多步驟 pipeline（如 extract → lookup → abstract）的每個步驟，**必須作為獨立背景 process 執行**，不得串接在同一個 shell session 中依序阻塞執行。
-
-## 執行範本
-
-```bash
-TS=$(date +%Y%m%d_%H%M%S)
-python step_a.py >> logs/step_a_$TS.log 2>&1 &
-echo "step_a PID: $!"
-
-python step_b.py >> logs/step_b_$TS.log 2>&1 &
-echo "step_b PID: $!"
-```
-
-## 為何這樣做
-
-- 可個別 `kill <PID>` 終止單一步驟，不影響其他步驟
-- 各步驟 log 獨立，方便除錯
-- 步驟之間天然形成 pipeline：各步驟 poll 自己的 queue，資料從上游流向下游，不需要等前一步驟「全部完成」
-- 一個步驟 crash 不會帶倒其他步驟
-
-## 步驟設計原則
-
-- 每個步驟都應實作 **while loop**：有資料就處理，無資料則退出
-- 步驟之間透過資料庫的「待處理狀態」傳遞訊號（如 `place_id IS NULL`），不需要明確的 inter-process communication
-- 這樣所有步驟可同時啟動，各自追著上游的進度跑
-<!-- END_FILE: pipeline_background_steps.md -->
-
-<!-- START_FILE: prefer-ssh-over-gui-access.md (MD5: adf25ee6d80c5556c692001b711bfd59) -->
----
-name: prefer-ssh-over-gui-access
-trigger: model_decision
-description: "當需要提供遠端存取方案時，預設使用 SSH 而非 VNC 或其他 GUI 桌面串流服務。"
----
-
-# 遠端存取偏好：SSH 優先
-
-## 規則
-
-需要讓使用者遠端存取服務或介面時：
-
-- **優先**：開放 SSH port，讓使用者透過 SSH tunnel 或直連存取
-- **避免**：預設啟動 VNC、RDP 或其他 GUI 桌面串流服務
-
-## 禁止行為
-
-- 不得在未說明理由的情況下，預設提供 VNC/RDP 解法
-
-## 適用情境
-
-| 情境 | 建議方案 |
-|------|----------|
-| 遠端執行指令、傳輸檔案、查看日誌 | SSH |
-| 服務本身無法在非圖形環境運作（桌面應用、瀏覽器視覺除錯）| 可選 VNC，需先說明原因並確認 |
-
-## 例外
-
-若服務本身需要圖形介面，可提供 VNC，但必須：
-1. 說明為何 SSH 無法滿足需求
-2. 取得使用者確認後再啟動
-<!-- END_FILE: prefer-ssh-over-gui-access.md -->
 
 <!-- START_FILE: project_setup_files.md (MD5: c43e55602c9d2b4de753817838c8581f) -->
 ---
@@ -774,129 +409,6 @@ description: "README 優先原則，要求 AI 主動讀取並維護各目錄下�
 - **實作原理 (Implementation
   Details)**：簡述「運作原理」與核心邏輯，幫助開發者與 AI 理解其內部流程。
 <!-- END_FILE: readme_management.md -->
-
-<!-- START_FILE: scraping_methodology.md (MD5: 9e81a76043ceab822aa0a60ffa618276) -->
----
-name: scraping_methodology
-trigger: always_on
-description: "爬蟲開發方法論：監聽技巧、認證機制、reCAPTCHA 限制，以及何時保留瀏覽器自動化。"
----
-
-# 爬蟲開發方法論 (Scraping Methodology)
-
-## 核心原則
-
-爬蟲開發分為兩個階段，**不得在探索階段就定案**：
-
-1. **探索階段**：允許使用瀏覽器自動化工具操作介面，以理解網站行為與資料流。
-2. **定案階段**：探索完成後，**必須**監聽網路請求，找出背後的 HTTP API，改以純 API 呼叫實作最終方案。
-
-## 為何要轉換
-
-- 瀏覽器自動化速度慢、資源佔用高、容易因 UI 變動而損壞。
-- 直接呼叫 API 更穩定、更快、更容易維護與測試。
-
-## 實作順序
-
-```
-瀏覽器自動化探索 → 監聽網路請求找出 API endpoint
-→ 確認 headers / payload / 認證機制
-→ 改寫為純 API 腳本 → 移除瀏覽器自動化依賴
-```
-
-## 監聽技巧（Playwright）
-
-### 必須同時監聽 request 與 response
-
-只監聽 request 拿不到 API response 格式（如 channelId 欄位名稱）。**永遠都要同時掛兩個 handler**：
-
-```python
-ctx.on("request",  on_request)   # 看 method / url / body / headers
-ctx.on("response", on_response)  # 看 status / response body / 取得 ID
-```
-
-### 監聽 context 而非 page
-
-```python
-# ❌ 只監聽當前分頁（錯過新開的分頁）
-page.on("request", handler)
-
-# ✅ 監聽整個 context（含所有分頁）
-ctx.on("request", handler)
-```
-
-### 即時寫入日誌
-
-不要等 Enter 才存檔。每次攔截到就立刻寫入：
-
-```python
-def on_request(req):
-    _LOG.append(entry)
-    _OUT.write_text(json.dumps(_LOG, indent=2, ensure_ascii=False))  # 即時
-```
-
-### Header 過濾要夠寬
-
-過濾太嚴會漏掉關鍵 header（如 `x-xsrf-token`）。建議全部捕捉：
-
-```python
-"headers": dict(req.headers)  # 全抓，不過濾
-```
-
-### 擴大 host 過濾範圍
-
-同一服務可能跨多個子網域（如 `entry.line.biz`、`manager.line.biz`、`developers.line.biz`）：
-
-```python
-HOSTS = ("line.biz", "line.me")  # 用上層網域覆蓋所有子網域
-if not any(h in host for h in HOSTS):
-    return
-```
-
-## 認證機制（Session-based SPA）
-
-現代 SPA 通常使用 session cookie + XSRF-TOKEN，不是 Bearer token：
-
-- **Session cookie**：通常是 `ses`，設在 `.parent-domain.com`（含所有子網域）
-- **XSRF-TOKEN**：每個子網域可能有自己獨立的 token，需要先造訪目標網域後再取出
-
-```python
-# 先造訪目標網域讓瀏覽器建立 session
-await page.goto("https://target.example.com/")
-# 再取出該網域的 XSRF-TOKEN
-cookies = await ctx.cookies(["https://target.example.com"])
-xsrf = next((c["value"] for c in cookies if c["name"] == "XSRF-TOKEN"), "")
-```
-
-- **Playwright APIRequestContext**（`ctx.request.fetch`）比 urllib 更可靠，會自動帶 cookies
-
-## Bot 偵測與 reCAPTCHA
-
-### reCAPTCHA 無法在 headless 環境下通過
-
-- reCAPTCHA v2 invisible 與 v3 都能偵測 headless/Xvfb 環境，包括 playwright-stealth 仍無效
-- 只有**真實有頭瀏覽器**（`headless=False` + 真實 DISPLAY，如 `ssh -X`）才能通過
-
-### 分離受 reCAPTCHA 保護的步驟
-
-遇到 reCAPTCHA 時，正確做法是**拆分流程**，而不是嘗試繞過：
-
-```
-# 受 reCAPTCHA 保護的步驟 → 手動或 --headed 模式
-# 其他 API 步驟 → 純 API 呼叫（headless）
-```
-
-提供 `--oa-id <id>` 等參數讓使用者跳過需要 reCAPTCHA 的建立步驟，直接進行後續設定。
-
-### Headless 偵測
-
-瀏覽器指紋（`sec-ch-ua` 含 `HeadlessChrome`、`navigator.webdriver = true`）可被伺服器識別。部分站台只對 GET 放行 headless，POST 仍拒絕。
-
-## 例外情況
-
-僅在純 API 技術上無法達成目標時（如 reCAPTCHA 保護），才允許保留瀏覽器自動化作為最終方案。
-例外情況**必須在 README 或 `ASK_HUMAN.md` 中說明理由**，否則視為規範違反。
-<!-- END_FILE: scraping_methodology.md -->
 
 <!-- START_FILE: secrets-management.md (MD5: 674bf6e07e40874ba9be45a9709a6d4d) -->
 ---
@@ -1000,229 +512,55 @@ cd /data/secrets && ./backup.sh
 - 直接讀取 `/data/secrets/` 而不透過 `.envrc` 或 `get-secret.sh`（AI agent 適用）
 <!-- END_FILE: secrets-management.md -->
 
-<!-- START_FILE: skill-vs-tool.md (MD5: 3c22e60eff11645584f571e67f8733bf) -->
+<!-- START_FILE: workstation-environment.md (MD5: 4e019c59d28b9b5f83301c5be4ce835e) -->
 ---
-name: skill-vs-tool
+name: workstation-environment
 trigger: always_on
-description: "區分 skill 與 tool 的判斷準則：何時留在 .agent/skills/，何時應獨立發布為工具。"
+description: "工作站環境事實：VM 規格、連線方式、慣用工具與 monorepo 佈局。供所有 agent 建立環境假設，避免重複盤點或做出錯誤預設。"
 ---
 
-# Skill 與 Tool 的區別
+# 工作站環境 (Workstation Environment)
 
-## 核心問題
+本規則記載環境層級的事實。容器工具見 `container-tooling`，port 使用見 `port-registry`，secret 見 `secrets-management`。
 
-> 這個能力，logos 以外的情境會用到嗎？
+## 主機與連線
 
-| | Skill | Tool |
-|--|-------|------|
-| **本質** | 指導 AI agent 行為的 markdown 文件 | 可獨立執行的程式碼或腳本 |
-| **使用者** | logos monorepo 內的 AI agents | 任何專案、任何人 |
-| **存放位置** | `.agent/skills/` | 獨立 repo 或套件，delivery 組負責發布 |
-| **依賴** | 依賴 logos 的組織結構與 disciplines | 不得依賴 logos monorepo 內部路徑 |
+- 工作站：Ubuntu 24.04 LTS VM（32G RAM），透過 **Tailscale** 連線；使用者本機為 Linux Mint。
+- 使用者常在**手機與電腦間快速切換**操作同一個 session——不得假設對方在桌面環境，互動式步驟要能在手機上完成或改為背景執行。
+- 遠端存取一律 SSH 優先（見 `prefer-ssh-over-gui-access`）。
 
-## 判斷流程
+## 慣用工具
 
-```
-這個東西是可執行的程式碼/腳本？
-  ↓ 否 → 是 AI 行為指引 → Skill，放 .agent/skills/
-  ↓ 是
-logos 以外也會需要這個能力？
-  ↓ 否 → 放組內，不需獨立
-  ↓ 是
-→ Tool，交 delivery 組規劃獨立發布
-   logos 內改為援引（.agent/skills/ 寫使用方式）
-```
+- 終端環境：tmux；編輯器：neovim (LazyVim)；GitHub 操作：gh CLI。
+- 產出檔案或指令時，以這些工具的慣例為預設（例如給 tmux 內可直接執行的指令，不假設 GUI 編輯器存在）。
 
-## 典型案例
+## 版控與目錄佈局
 
-| 案例 | 分類 | 原因 |
-|------|------|------|
-| `call-team`（跨組 -p 封裝） | Skill | 只服務 logos 內各組 |
-| `escalate-to-supervision` | Skill | logos 組織結構專屬 |
-| `sync_disciplines` | Skill + 腳本 | 僅服務 logos disciplines 體系 |
-| `switchboard`（LINE 通訊） | **Tool** | LINE 訊息能力與 logos 組織無關，外部專案也可能需要 |
-| `gemini-web`（Playwright UI 自動化） | **Tool 候選** | Gemini Web 操作能力與 logos 無關，但尚未有外部需求確認 |
+- 組織 monorepo：`/data/logos/`，按組別分目錄（strategy、education、operations 等 11 組）。
+- 版控策略：**polyrepo + meta repo 索引**——各專案獨立 repo，由 meta repo（logos）索引；不得把獨立專案硬併入單一 repo。
+- 個人對話工作區：`~/chat-with-agent/`（DIARY.md、TODO_LIST.md）。
+<!-- END_FILE: workstation-environment.md -->
 
-## 升格為 Tool 的條件
+## 條件式規則索引（相關任務時先讀全文再行動）
 
-滿足以下任一條件，才啟動獨立發布流程：
-1. 已有 logos 以外的實際使用需求
-2. 功能本身與 logos 組織架構完全無耦合，且具備明確的 API 介面
-
-**不因「未來可能有人用」而提前獨立。**
-<!-- END_FILE: skill-vs-tool.md -->
-
-<!-- START_FILE: todolist_format.md (MD5: 84b2c7ac47c3087e443ece677518df55) -->
----
-name: todolist_format
-trigger: glob
-globs: "AGENT_PLAN.md ASK_HUMAN.md TODOLIST.md ASKHUMAN.md"
-description: "規範 AGENT_PLAN (TODOLIST) 與 ASK_HUMAN (ASKHUMAN) 的格式要求，包含日期標記與排序規則。"
----
-
-# 清單格式規範 (List Format Guidelines)
-
-當編輯 `AGENT_PLAN.md` (或 `TODOLIST.md`) 與 `ASK_HUMAN.md` (或 `ASKHUMAN.md`)
-時，必須遵循以下格式：
-
-- **格式規範**：
-  - 使用條列表 (`- [ ]`, `- [x]`)。
-  - 標號後加上日期 (格式：`YYYY-MM-DD`)。
-  - **最新日期優先**：新加入的項目應置於文件最上方。
-<!-- END_FILE: todolist_format.md -->
-
-<!-- START_FILE: web_content_extraction.md (MD5: 23c820e9e4ac5c462e33c3b9d52ec438) -->
----
-name: web_content_extraction
-trigger: manual
-description: "定義何時應使用 /fetch_web_content 工作流來獲取網頁內容。"
----
-
-# 網頁內容擷取規範 (Web Content Extraction Guidelines)
-
-當需要獲取外部資訊時，應遵循以下使用時機與規範：
-
-## 1. 使用時機
-
-- **調研與參考**：當使用者提供 URL 並要求分析、總結或參考該網頁內容時。
-- **自動化補全**：當需要特定文檔或網頁數據來輔助程式碼撰寫，且已知該數據存在於特定
-  URL 時。
-- **禁止行為**：嚴禁在未經使用者許可的情況下，頻繁或大規模爬取無關網頁。
-
-## 2. 執行流程
-
-- 始終優先執行 `/fetch_web_content` 工作流。
-- 確保擷取的內容經過 Markdown 轉換，以節省 Token 並提高 AI 閱讀效率。
-<!-- END_FILE: web_content_extraction.md -->
+| 規則 | 觸發 | 何時必讀 | 路徑 |
+|------|------|----------|------|
+| agent_plan_update_triggers | glob: AGENT_PLAN.md | 規範 AGENT_PLAN.md 何時必須更新，確保設計決策與完成進度即時反映。 | /data/logos/education/global-disciplines/.agent/rules/agent_plan_update_triggers.md |
+| bootstrapping-direct-call | model_decision | 說明 call-agent 尚未就位時的 bootstrapping 例外：人類暫代 call-agent 角色，負責注入 --allowedTools 給監察組。 | /data/logos/education/global-disciplines/.agent/rules/bootstrapping-direct-call.md |
+| consume_external_projects | model_decision | 呼叫或引用其他專案（共用工具庫、其他組模組）時必讀：先讀文件，直接嘗試，遇困難才看實作。 | /data/logos/education/global-disciplines/.agent/rules/consume_external_projects.md |
+| container-tooling | model_decision | 容器工具規範：logos 環境一律使用 podman，禁止使用 docker CLI 或 docker-compose。 | /data/logos/education/global-disciplines/.agent/rules/container-tooling.md |
+| discipline_metadata | glob: GEMINI.md .agent/rules/**/*.md .agent/skills/**/*.md .agent/workflows/**/*.md | 用於確保 GEMINI.md 與所有 Discipline (規則、技能、工作流) 檔案包含必要的元資料 (Metadata)。 | /data/logos/education/global-disciplines/.agent/rules/discipline_metadata.md |
+| dry_dynamic_keys | model_decision | 禁止對多維度相同操作硬編碼每個 key，應以動態迭代統一處理，確保 DRY 與單一來源原則。 | /data/logos/education/global-disciplines/.agent/rules/dry_dynamic_keys.md |
+| env-driven-config | model_decision | 非 secret 的外部設定參照模式：路徑、端點、feature flag 等一律以 .env 宣告，不得 hardcode。Secret 值另見 secrets-management 規範。 | /data/logos/education/global-disciplines/.agent/rules/env-driven-config.md |
+| functional_core_imperative_shell | model_decision | 純計算與副作用分離：pure function 不做 I/O，orchestrator 不做業務邏輯。又稱 Functional Core / Imperative Shell。 | /data/logos/education/global-disciplines/.agent/rules/functional_core_imperative_shell.md |
+| modular_decomposition | model_decision | 專案模組拆解原則：何時抽離、抽到哪、personal 如何援引、如何交付。 | /data/logos/education/global-disciplines/.agent/rules/modular_decomposition.md |
+| pipeline_background_steps | model_decision | 多步驟 pipeline 各步驟必須獨立背景執行，各有 PID 與 log 檔，可個別終止。 | /data/logos/education/global-disciplines/.agent/rules/pipeline_background_steps.md |
+| port-registry | model_decision | 起任何服務前必須查 port 清單、避免衝突，並在 internal-control/ports.json 登記。 | /data/logos/education/global-disciplines/.agent/rules/port-registry.md |
+| post_deploy_verify | model_decision | 部署完成後必須實際開啟產品（前端、API、CLI 等任何使用者觸達的入口）驗證可用，再宣告完成。Status 200 ≠ runtime OK。 | /data/logos/education/global-disciplines/.agent/rules/post-deploy-verify.md |
+| prefer-ssh-over-gui-access | model_decision | 當需要提供遠端存取方案時，預設使用 SSH 而非 VNC 或其他 GUI 桌面串流服務。 | /data/logos/education/global-disciplines/.agent/rules/prefer-ssh-over-gui-access.md |
+| scraping_methodology | model_decision | 爬蟲開發方法論：監聽技巧、認證機制、reCAPTCHA 限制，以及何時保留瀏覽器自動化。 | /data/logos/education/global-disciplines/.agent/rules/scraping_methodology.md |
+| skill-vs-tool | model_decision | 區分 skill 與 tool 的判斷準則：何時留在 .agent/skills/，何時應獨立發布為工具。 | /data/logos/education/global-disciplines/.agent/rules/skill-vs-tool.md |
+| todolist_format | glob: AGENT_PLAN.md ASK_HUMAN.md TODOLIST.md ASKHUMAN.md | 規範 AGENT_PLAN (TODOLIST) 與 ASK_HUMAN (ASKHUMAN) 的格式要求，包含日期標記與排序規則。 | /data/logos/education/global-disciplines/.agent/rules/todolist_format.md |
+| web_content_extraction | manual | 定義何時應使用 /fetch_web_content 工作流來獲取網頁內容。 | /data/logos/education/global-disciplines/.agent/rules/web_content_extraction.md |
 
 <!-- DISCIPLINE_END: rules -->
-
----
-
-## Discipline 同步機制
-
-所有 disciplines（rules、workflows、skills）的**唯一來源**為 `/home/logos/.gemini/.agent/`，透過 `sync_disciplines` skill 同步至各 agent 的目標位置。
-
-### 支援的 Agent
-
-| Agent | 目的 | 同步指令 |
-|-------|------|---------|
-| `antigravity` | 同步至 Gemini CLI 的工作目錄 | `bash .agent/skills/sync_disciplines/scripts/sync.sh antigravity` |
-| `claude` | 同步全域 disciplines 至 `~/.claude/` | `bash .agent/skills/sync_disciplines/scripts/sync.sh claude` |
-
-### Claude 整合說明
-
-`claude` agent 將 disciplines 整合進 Claude Code 的**全域**目錄結構（`~/.claude/`）：
-
-```
-~/.claude/
-├── CLAUDE.md       ← rules 注入（insert_text 策略）
-└── commands/       ← workflows 軟連結（soft_link 策略）
-    ├── git-commit.md
-    ├── setup-project.md
-    └── fetch-web-content.md
-```
-
-**執行全域同步**
-```bash
-cd /home/logos/.gemini
-bash .agent/skills/sync_disciplines/scripts/sync.sh claude
-```
-
-執行後，所有 Claude Code session 都會自動載入：
-- 所有全域 rules（透過 `~/.claude/CLAUDE.md`）
-- 所有 slash 指令 `/git-commit`、`/setup-project`、`/fetch-web-content`（透過 `~/.claude/commands/`）
-
-> 專案層級的 discipline 同步由各專案自行維護，此處僅處理全域（user-level）設定。
----
-name: functional_core_imperative_shell
-trigger: always_on
-description: "純計算與副作用分離：pure function 不做 I/O，orchestrator 不做業務邏輯。又稱 Functional Core / Imperative Shell。"
----
-
-# Functional Core / Imperative Shell
-
-## 核心規則
-
-**純計算與副作用必須分離，不得混在同一個函式或模組中。**
-
-- **Functional Core（純計算）**：相同輸入永遠回傳相同輸出，無任何副作用（不呼叫網路、不讀寫 DB、不讀時間、不產生 random）
-- **Imperative Shell（副作用層）**：負責 I/O、協調順序、呼叫 core 並傳遞結果，本身不含業務邏輯
-
-## 副作用的種類
-
-I/O 只是副作用的一種，以下都屬於副作用，不應出現在 core 裡：
-- 網路呼叫、資料庫讀寫、檔案讀寫
-- 讀取當前時間（`datetime.now()`、`Date.now()`）
-- 亂數生成
-- 全域狀態修改
-- Logging（嚴格來說）
-
-## 為什麼
-
-- Core 可以用純 unit test 驗證，不需要 mock、不需要 async、不需要真實服務
-- Shell 的職責清楚：它只知道「呼叫誰」和「傳什麼」，不感知業務細節
-- 新增功能時，通常只需擴充 core，不需要動 shell
-
-## 典型結構
-
-```
-Shell（有副作用）
-  → 取得原始資料（I/O）
-  → 傳給 Core 計算（pure）
-  → 把結果寫出去（I/O）
-```
-
-## 範例
-
-```python
-# ❌ 混在一起
-async def sync_messages():
-    raw = await client.fetch()      # I/O
-    result = normalize(raw)         # 計算
-    await db.upsert(result)         # I/O
-
-def normalize(raw):
-    now = datetime.now()            # 副作用：時間
-    return {..., "synced_at": now}
-
-# ✅ 分離
-def normalize(raw: dict) -> dict:   # Core：純計算
-    return {"external_id": raw["id"], "text": raw.get("text")}
-
-async def sync_messages():          # Shell：協調副作用
-    raw = await client.fetch()
-    result = normalize(raw)
-    await db.upsert(result)
-```
-
-## 命名慣例
-
-- Core 方法：`adapt_*`、`normalize_*`、`parse_*`、`validate_*`、`compute_*`
-- Shell 方法：`sync_*`、`fetch_and_store_*`、`execute_*`、`run_*`
----
-name: consume_external_projects
-trigger: always_on
-description: "使用外部專案時的行為準則：先讀文件，直接嘗試，遇困難才看實作。"
----
-
-# 引用外部專案規範 (Consuming External Projects)
-
-## 核心規則
-
-使用其他專案（如 switchboard-AI、共用工具庫等）時，**只讀文件，不主動查看實作**。
-
-## 行為順序
-
-1. **讀 README**：了解介面、使用方式、參數格式
-2. **直接嘗試**：依文件寫呼叫程式碼，執行看看
-3. **遇到錯誤才深入**：只在文件無法解釋問題時，才讀對應的實作檔案
-
-## 禁止行為
-
-- 閱讀完 README 後，未嘗試就繼續讀實作
-- 把對方的實作細節納入自己的邏輯判斷（對方的 README 是契約，實作可能隨時改變）
-
-## Why
-
-文件是外部專案對外的契約。看實作等於繞過契約，形成隱性依賴，對方改版後容易斷裂。先信任文件，有問題再回報給維護者或提 issue。

@@ -57,6 +57,16 @@ sync_duplicate() {
     echo "  Success: Duplicated $source to $target"
 }
 
+# 取 frontmatter 欄位值（僅掃描檔案開頭的 --- 區塊，去除外層引號）
+get_frontmatter_field() {
+    awk -v key="$2" '
+        NR==1 && $0!="---" { exit }
+        NR>1 && $0=="---" { exit }
+        $0 ~ "^"key": " {
+            sub("^"key": *", ""); gsub(/^"|"$/, ""); print; exit
+        }' "$1"
+}
+
 # Strategy: insert_text
 sync_insert_text() {
     local source_dir="$1"
@@ -78,13 +88,32 @@ sync_insert_text() {
     local end_marker="<!-- DISCIPLINE_END: $(basename "$source_dir") -->"
     
     local combined_rules=""
+    local index_rows=""
     # Sort files to ensure stable order
     for f in $(ls "$source_dir"/*.md | sort); do
         local filename=$(basename "$f")
-        local content=$(cat "$f")
-        local checksum=$(get_content_checksum "$content")
-        combined_rules+="\n<!-- START_FILE: $filename (MD5: $checksum) -->\n$content\n<!-- END_FILE: $filename -->\n"
+        local trigger=$(get_frontmatter_field "$f" "trigger")
+        # 分級載入（discipline_metadata §3）：always_on 或未宣告 → 全文注入；其餘 → 索引
+        if [[ -z "$trigger" || "$trigger" == "always_on" ]]; then
+            local content=$(cat "$f")
+            local checksum=$(get_content_checksum "$content")
+            combined_rules+="\n<!-- START_FILE: $filename (MD5: $checksum) -->\n$content\n<!-- END_FILE: $filename -->\n"
+        else
+            local rule_name=$(get_frontmatter_field "$f" "name")
+            [[ -z "$rule_name" ]] && rule_name="${filename%.md}"
+            local desc=$(get_frontmatter_field "$f" "description")
+            local trig_col="$trigger"
+            if [[ "$trigger" == "glob" ]]; then
+                local globs=$(get_frontmatter_field "$f" "globs")
+                [[ -n "$globs" ]] && trig_col="glob: $globs"
+            fi
+            index_rows+="| $rule_name | $trig_col | $desc | $(realpath "$f") |\n"
+        fi
     done
+
+    if [[ -n "$index_rows" ]]; then
+        combined_rules+="\n## 條件式規則索引（相關任務時先讀全文再行動）\n\n| 規則 | 觸發 | 何時必讀 | 路徑 |\n|------|------|----------|------|\n${index_rows}"
+    fi
 
     local new_block=$(echo -e "${start_marker}${combined_rules}\n${end_marker}")
     
