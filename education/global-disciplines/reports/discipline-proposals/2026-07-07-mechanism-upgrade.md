@@ -29,7 +29,12 @@ insert_text 只全文注入 always_on；其餘規則生成「條件式規則索�
 ### 4. 決策分層（立法：decision-authority.md，新規則）
 按錯誤回復成本分三層：agent 終審 / 批次呈報（帶預設值）/ 中斷等決。
 
-## 待驗證
+## 驗證結果（2026-07-08）
 
-- sync 後 GEMINI.md 體積下降、索引正確
-- hooks 需新 session 生效 → 待人工驗證
+- sync 後 GEMINI.md 1502 → 566 行，索引正確 ✓
+- hooks 以新 headless session 端到端實測生效（sudo deny、Stop block 且防迴圈正常）✓
+
+## 沉澱（2026-07-08）
+
+本次升級的模式已正式化為 global rule `discipline-evolution.md`（model_decision）：
+三層執行架構（條文／機制／稽核）＋升級迴圈（診斷→立法→機制化→驗證→記錄→觀察）＋分級調整信號。
