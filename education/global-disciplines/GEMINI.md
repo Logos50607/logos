@@ -549,6 +549,7 @@ description: "工作站環境事實：VM 規格、連線方式、慣用工具與
 | bootstrapping-direct-call | model_decision | 說明 call-agent 尚未就位時的 bootstrapping 例外：人類暫代 call-agent 角色，負責注入 --allowedTools 給監察組。 | /data/logos/education/global-disciplines/.agent/rules/bootstrapping-direct-call.md |
 | consume_external_projects | model_decision | 呼叫或引用其他專案（共用工具庫、其他組模組）時必讀：先讀文件，直接嘗試，遇困難才看實作。 | /data/logos/education/global-disciplines/.agent/rules/consume_external_projects.md |
 | container-tooling | model_decision | 容器工具規範：logos 環境一律使用 podman，禁止使用 docker CLI 或 docker-compose。 | /data/logos/education/global-disciplines/.agent/rules/container-tooling.md |
+| discipline-evolution | model_decision | 新增、修改或強制執行 disciplines 時必讀：三層執行架構（條文／機制／稽核）與制度升級迴圈（診斷→立法→機制化→驗證→記錄→觀察）。 | /data/logos/education/global-disciplines/.agent/rules/discipline-evolution.md |
 | discipline_metadata | glob: GEMINI.md .agent/rules/**/*.md .agent/skills/**/*.md .agent/workflows/**/*.md | 用於確保 GEMINI.md 與所有 Discipline (規則、技能、工作流) 檔案包含必要的元資料 (Metadata)。 | /data/logos/education/global-disciplines/.agent/rules/discipline_metadata.md |
 | dry_dynamic_keys | model_decision | 禁止對多維度相同操作硬編碼每個 key，應以動態迭代統一處理，確保 DRY 與單一來源原則。 | /data/logos/education/global-disciplines/.agent/rules/dry_dynamic_keys.md |
 | env-driven-config | model_decision | 非 secret 的外部設定參照模式：路徑、端點、feature flag 等一律以 .env 宣告，不得 hardcode。Secret 值另見 secrets-management 規範。 | /data/logos/education/global-disciplines/.agent/rules/env-driven-config.md |
