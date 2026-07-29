@@ -63,9 +63,44 @@
     "host": "localhost"
   },
   {
+    "port": 13000,
+    "service": "tw-digital-nomad-server",
+    "description": "Nomad Taiwan 前台 NestJS server（臨時預覽用）",
+    "owner": "urfit-tech/digital-nomad",
+    "host": "localhost"
+  },
+  {
+    "port": 13500,
+    "service": "rdl-api",
+    "description": "RDL NestJS API",
+    "owner": "personal/rdl",
+    "host": "localhost"
+  },
+  {
+    "port": 13501,
+    "service": "rdl-web",
+    "description": "RDL Next.js 前端（預留，尚未建置）",
+    "owner": "personal/rdl",
+    "host": "localhost"
+  },
+  {
     "port": 15432,
     "service": "mogroup-switchboard-db",
     "description": "mogroup-switchboard PostgreSQL（metadata / audit / permissions）",
+    "owner": "urfit-tech/mogroup-switchboard",
+    "host": "localhost"
+  },
+  {
+    "port": 15433,
+    "service": "rdl-db",
+    "description": "RDL PostgreSQL",
+    "owner": "personal/rdl",
+    "host": "localhost"
+  },
+  {
+    "port": 16379,
+    "service": "mogroup-switchboard-redis",
+    "description": "mogroup-switchboard Redis（Kolable session token 快取，AOF 持久化）",
     "owner": "urfit-tech/mogroup-switchboard",
     "host": "localhost"
   },
@@ -75,6 +110,13 @@
     "description": "smart-home FastAPI（Arduino IR 控制 UI，僅 tailscale 連入）",
     "owner": "personal/smart-home",
     "host": "tailscale"
+  },
+  {
+    "port": 18081,
+    "service": "nomad-taiwan-visa",
+    "description": "Nomad Taiwan 簽證申請系統 FastAPI（臨時預覽用）",
+    "owner": "urfit-tech/digital-nomad",
+    "host": "localhost"
   },
   {
     "port": 18765,
