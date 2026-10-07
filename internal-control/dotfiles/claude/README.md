@@ -16,6 +16,9 @@ description: "Claude Code hooks：以機制強制執行 disciplines（sudo 攔�
 | `hooks/pretooluse-deny-sudo.sh` | agent_behavior §4 提權邊界 | PreToolUse(Bash)：攔截 agent 自行執行 sudo，deny 並要求交給使用者以 `! <指令>` 執行 |
 | `hooks/stop-uncommitted-reminder.sh` | git_usage §1 即時提交 | Stop：偵測 cwd 有未 commit 變更時 block 一次提醒；`stop_hook_active` 防無限迴圈 |
 | `hooks/test_*.sh` | — | 測試（pipe 範例 JSON 進腳本驗證） |
+| `settings-baseline.json` | 對話紀錄保留 | 各機共用的 settings 基準值（目前：`cleanupPeriodDays: 3650`，避免預設 30 天自動刪除 transcript） |
+| `apply-settings.sh` | — | 把 baseline 冪等合併進 `~/.claude/settings.json`（保留既有 hooks 等其他鍵，備份為 `.bak`） |
+| `test_apply_settings.sh` | — | 驗證合併、保留既有鍵、冪等 |
 
 ## 使用指南
 
@@ -28,9 +31,10 @@ description: "Claude Code hooks：以機制強制執行 disciplines（sudo 攔�
 }
 ```
 
-2. **hooks 於新 session 才生效**（settings 在 session 啟動時載入）。
-3. 測試：`sh hooks/test_pretooluse_deny_sudo.sh && sh hooks/test_stop_uncommitted.sh`
-4. 若 Stop 提醒在長期 dirty 的 repo 中過吵：優先把該 repo 清乾淨（這正是規則的本意）；真要停用，從 settings.json 移除 Stop 區塊即可。
+2. 新機器或重建後執行 `sh apply-settings.sh` 套用 baseline；新增共用設定只需改 `settings-baseline.json`。
+3. **hooks 與 settings 於新 session 才生效**（settings 在 session 啟動時載入）。
+4. 測試：`sh hooks/test_pretooluse_deny_sudo.sh && sh hooks/test_stop_uncommitted.sh && sh test_apply_settings.sh`
+5. 若 Stop 提醒在長期 dirty 的 repo 中過吵：優先把該 repo 清乾淨（這正是規則的本意）；真要停用，從 settings.json 移除 Stop 區塊即可。
 
 ## 實作原理
 
