@@ -1,5 +1,41 @@
 [
   {
+    "name": "liaison-channel-db-password",
+    "description": "liaison-channel PostgreSQL 資料庫密碼",
+    "type": "file",
+    "path": "liaison-channel/db-password",
+    "consumers": [
+      "personal/liaison-channel"
+    ]
+  },
+  {
+    "name": "liaison-channel-chrome-profile-line",
+    "description": "LINE Personal Chrome profile 目錄（含 LINE extension session）",
+    "type": "path",
+    "path": "liaison-channel/chrome-profile-line",
+    "consumers": [
+      "personal/liaison-channel"
+    ]
+  },
+  {
+    "name": "liaison-channel-chrome-profile-social",
+    "description": "Social Chrome profile 目錄（Instagram + Discord 登入 session）",
+    "type": "path",
+    "path": "liaison-channel/chrome-profile-social",
+    "consumers": [
+      "personal/liaison-channel"
+    ]
+  },
+  {
+    "name": "liaison-channel-line-oa-state",
+    "description": "LINE OA Playwright storage_state（chat.line.biz 登入 session）",
+    "type": "file",
+    "path": "liaison-channel/line-oa-state.json",
+    "consumers": [
+      "personal/liaison-channel"
+    ]
+  },
+  {
     "name": "line-personal-session",
     "description": "LINE Chrome 個人帳號 session 目錄路徑（CDP 用）",
     "type": "path",
@@ -150,6 +186,250 @@
     "path": "elevenlabs/api-key",
     "consumers": [
       "personal/thai-material"
+    ]
+  },
+  {
+    "name": "aigo-cloud-database-url",
+    "description": "AI-GO Supabase Cloud DB DSN（asyncpg pooler）",
+    "type": "file",
+    "path": "aigo/cloud-database-url",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-supabase-anon-key",
+    "description": "AI-GO Supabase anon JWT",
+    "type": "file",
+    "path": "aigo/supabase-anon-key",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-supabase-service-role-key",
+    "description": "AI-GO Supabase service_role JWT",
+    "type": "file",
+    "path": "aigo/supabase-service-role-key",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-backend-secret-key",
+    "description": "AI-GO 後端 SECRET_KEY（JWT 簽章）",
+    "type": "file",
+    "path": "aigo/backend-secret-key",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-onesignal-app-id",
+    "description": "AI-GO OneSignal App ID",
+    "type": "file",
+    "path": "aigo/onesignal-app-id",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-onesignal-api-key",
+    "description": "AI-GO OneSignal REST API Key",
+    "type": "file",
+    "path": "aigo/onesignal-api-key",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-notion-api-key",
+    "description": "AI-GO Notion CRM 整合 API Key",
+    "type": "file",
+    "path": "aigo/notion-api-key",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-notion-database-id",
+    "description": "AI-GO Notion CRM 整合資料庫 ID",
+    "type": "file",
+    "path": "aigo/notion-database-id",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-openai-api-key",
+    "description": "AI-GO OpenAI API Key",
+    "type": "file",
+    "path": "aigo/openai-api-key",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "lodestar-hasura-admin-secret-dev",
+    "description": "Lodestar Hasura GraphQL 管理員密鑰（開發環境）",
+    "type": "file",
+    "path": "lodestar/hasura-admin-secret-dev",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-hasura-jwt-secret-dev",
+    "description": "Lodestar Hasura JWT 密鑰（開發環境）",
+    "type": "file",
+    "path": "lodestar/hasura-jwt-secret-dev",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-postgres-uri-dev",
+    "description": "Lodestar PostgreSQL 連線 URI（開發環境）",
+    "type": "file",
+    "path": "lodestar/postgres-uri-dev",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-hasura-admin-secret-prod",
+    "description": "Lodestar Hasura GraphQL 管理員密鑰（生產環境）",
+    "type": "file",
+    "path": "lodestar/hasura-admin-secret-prod",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-hasura-jwt-secret-prod",
+    "description": "Lodestar Hasura JWT 密鑰（生產環境）",
+    "type": "file",
+    "path": "lodestar/hasura-jwt-secret-prod",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-postgres-uri-prod",
+    "description": "Lodestar PostgreSQL 連線 URI（生產環境）",
+    "type": "file",
+    "path": "lodestar/postgres-uri-prod",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-kkschool-service-key",
+    "description": "kkschool app 的 auth.service.key（生產環境）",
+    "type": "file",
+    "path": "lodestar/kkschool-service-key",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-techxue-service-key",
+    "description": "techxue app 的 auth.service.key（生產環境）",
+    "type": "file",
+    "path": "lodestar/techxue-service-key",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-xlab-service-key",
+    "description": "xlab app 的 auth.service.key（生產環境）",
+    "type": "file",
+    "path": "lodestar/xlab-service-key",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-aischool-service-key",
+    "description": "aischool app 的 auth.service.key（生產環境）",
+    "type": "file",
+    "path": "lodestar/aischool-service-key",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-xuemi-service-key",
+    "description": "xuemi app 的 auth.service.key（生產環境）",
+    "type": "file",
+    "path": "lodestar/xuemi-service-key",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "lodestar-sixdigital-service-key",
+    "description": "sixdigital app 的 auth.service.key（生產環境）",
+    "type": "file",
+    "path": "lodestar/sixdigital-service-key",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "tailscale-api-key",
+    "description": "Tailscale API key，用於管理 tailnet ACL（限制 openlohas 只能存取 smart-home web port）",
+    "type": "file",
+    "path": "tailscale/api-key",
+    "consumers": [
+      "personal/smart-home"
+    ]
+  },
+  {
+    "name": "lodestar-nschool-service-key",
+    "description": "nschool app 的 auth.service.key（生產環境）",
+    "type": "file",
+    "path": "lodestar/nschool-service-key",
+    "consumers": [
+      "urfit-tech/lodestar/lodestar-tools"
+    ]
+  },
+  {
+    "name": "steam-sell-member-supabase-service-role-key",
+    "description": "steam_sell_member Supabase service_role secret key（project rfszknvekhacmhhuomfg）",
+    "type": "file",
+    "path": "steam-sell-member/supabase-service-role-key",
+    "consumers": [
+      "urfit-tech/steam_sell_member"
+    ]
+  },
+  {
+    "name": "aigo-demo-account-email",
+    "description": "AI GO demo 租戶（demo.ai-go.app）登入帳號 email",
+    "type": "file",
+    "path": "aigo/demo-account-email",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "aigo-demo-account-password",
+    "description": "AI GO demo 租戶（demo.ai-go.app）登入密碼",
+    "type": "file",
+    "path": "aigo/demo-account-password",
+    "consumers": [
+      "urfit-tech/AI-GO"
+    ]
+  },
+  {
+    "name": "gitlab-mirror-pat",
+    "description": "GitLab Personal Access Token（write_repository），供 GitHub Actions 將 repo 鏡像至 gitlab.com/urfit/digital-nomad-taiwan",
+    "type": "file",
+    "path": "gitlab/mirror-pat",
+    "consumers": [
+      "urfit-tech/tw-digital-nomad-server",
+      "urfit-tech/nomad-taiwan-visa"
     ]
   }
 ]
