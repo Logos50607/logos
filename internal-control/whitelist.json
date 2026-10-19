@@ -440,5 +440,23 @@
     "consumers": [
       "urfit-tech/mogroup-switchboard"
     ]
+  },
+  {
+    "name": "urfit-n8n-api-key",
+    "description": "urfit n8n Public API key（讀 workflow / executions）",
+    "type": "file",
+    "path": "urfit/n8n/api-key",
+    "consumers": [
+      "urfit-tech/digital-nomad"
+    ]
+  },
+  {
+    "name": "urfit-n8n-base-url",
+    "description": "urfit n8n 實例 base URL",
+    "type": "file",
+    "path": "urfit/n8n/base-url",
+    "consumers": [
+      "urfit-tech/digital-nomad"
+    ]
   }
 ]
