@@ -431,5 +431,14 @@
       "urfit-tech/tw-digital-nomad-server",
       "urfit-tech/nomad-taiwan-visa"
     ]
+  },
+  {
+    "name": "mogroup-switchboard-ec2-ssh-key",
+    "description": "mogroup-switchboard 正式站 EC2（13.251.234.82, ubuntu）SSH private key；與 GitHub Actions secret EC2_SSH_KEY 用途相同，供部署與運維",
+    "type": "file",
+    "path": "mogroup/mogroup-switchboard.pem",
+    "consumers": [
+      "urfit-tech/mogroup-switchboard"
+    ]
   }
 ]
