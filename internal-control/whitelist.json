@@ -458,5 +458,14 @@
     "consumers": [
       "urfit-tech/digital-nomad"
     ]
+  },
+  {
+    "name": "gcp-lait-good-erp-reader-sa",
+    "description": "lait-good-erp 資料試算表唯讀 service account（GCP 專案 lait-good-erp-ops）",
+    "type": "file",
+    "path": "gcp/lait-good-erp-reader-sa.json",
+    "consumers": [
+      "lait-good/lait-good-erp"
+    ]
   }
 ]
