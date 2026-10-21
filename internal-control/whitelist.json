@@ -460,10 +460,55 @@
     ]
   },
   {
+    "name": "urfit-openrouter-api-key",
+    "description": "urfit OpenRouter API Key（n8n ndc_digital_nomad chat model 用）",
+    "type": "file",
+    "path": "urfit/openrouter/api-key",
+    "consumers": [
+      "urfit-tech/digital-nomad"
+    ]
+  },
+  {
+    "name": "urfit-openai-api-key",
+    "description": "urfit OpenAI API Key（n8n ndc_digital_nomad chat 與 embeddings 用）",
+    "type": "file",
+    "path": "urfit/openai/api-key",
+    "consumers": [
+      "urfit-tech/digital-nomad"
+    ]
+  },
+  {
     "name": "gcp-lait-good-erp-reader-sa",
     "description": "lait-good-erp 資料試算表唯讀 service account（GCP 專案 lait-good-erp-ops）",
     "type": "file",
     "path": "gcp/lait-good-erp-reader-sa.json",
+    "consumers": [
+      "lait-good/lait-good-erp"
+    ]
+  },
+  {
+    "name": "lait-good-erp-dev-db-password",
+    "description": "lait-good ERP 本地開發 PostgreSQL 密碼",
+    "type": "file",
+    "path": "lait-good-erp/dev-db-password",
+    "consumers": [
+      "lait-good/lait-good-erp"
+    ]
+  },
+  {
+    "name": "lait-good-erp-google-oauth-client-secret",
+    "description": "lait-good ERP Google OAuth client secret（員工／客戶 Google 登入）",
+    "type": "file",
+    "path": "lait-good-erp/google-oauth-client-secret",
+    "consumers": [
+      "lait-good/lait-good-erp"
+    ]
+  },
+  {
+    "name": "lait-good-erp-line-login-channel-secret",
+    "description": "lait-good ERP LINE Login channel secret（LINE 登入與 LIFF）",
+    "type": "file",
+    "path": "lait-good-erp/line-login-channel-secret",
     "consumers": [
       "lait-good/lait-good-erp"
     ]

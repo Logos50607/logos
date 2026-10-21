@@ -124,5 +124,26 @@
     "description": "mogroup-switchboard FastAPI server",
     "owner": "urfit-tech/mogroup-switchboard",
     "host": "localhost"
+  },
+  {
+    "port": 15434,
+    "service": "lait-good-erp-db",
+    "description": "lait-good ERP 開發用 PostgreSQL（podman）",
+    "owner": "lait-good/lait-good-erp",
+    "host": "localhost"
+  },
+  {
+    "port": 13010,
+    "service": "lait-good-erp-api",
+    "description": "lait-good ERP NestJS API",
+    "owner": "lait-good/lait-good-erp",
+    "host": "localhost"
+  },
+  {
+    "port": 15173,
+    "service": "lait-good-erp-web",
+    "description": "lait-good ERP Vite dev server",
+    "owner": "lait-good/lait-good-erp",
+    "host": "localhost"
   }
 ]
