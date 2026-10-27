@@ -5,3 +5,9 @@
 	helper = store
 [http]
 	postBuffer = 524288000
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential

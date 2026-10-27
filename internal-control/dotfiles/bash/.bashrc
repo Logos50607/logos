@@ -139,7 +139,7 @@ export PATH="$PATH:/home/logos/.turso"
 export LINE_OA_CHAT_WHITELIST="Ued0d228b5a360577ceb5f580d9cdf12f"
 
 # LINE Personal TUI
-alias switchboard-tui='cd /data/personal/liason-tui && uv run tui.py'
+alias liaison-tui='cd /data/personal/liaison-tui && uv run tui.py'
 export PATH="$HOME/.local/bin:$PATH"
 
 # The next line updates PATH for the Google Cloud SDK.
