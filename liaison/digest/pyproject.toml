@@ -9,4 +9,7 @@ dependencies = [
     "python-dotenv",
     "psycopg2-binary>=2.9.11",
     "requests>=2.33.1",
+    "httpx",
+    "psycopg[binary]",
+    "sentence-transformers>=5.4.1",
 ]
