@@ -512,5 +512,14 @@
     "consumers": [
       "lait-good/lait-good-erp"
     ]
+  },
+  {
+    "name": "gmail-smtp-app-password",
+    "description": "Gmail App Password，供 liaison-channel 登入失效時寄通知信",
+    "type": "file",
+    "path": "gmail/smtp-app-password",
+    "consumers": [
+      "personal/liaison-channel"
+    ]
   }
 ]
